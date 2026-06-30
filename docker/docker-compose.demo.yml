@@ -1,0 +1,38 @@
+# Demo overlay — adds an auto-registering agent running REAL Vector and exposes
+# VictoriaMetrics, so a fresh
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up --build
+# shows the leader's own metrics flowing, an agent converging (going green) in
+# the UI, AND real throughput for that agent on the Health dashboard.
+#
+# Demo only — the agent talks to the backend over plain internal HTTP. Do not
+# use in production.
+name: vortexflow
+
+services:
+  # Demo mode: skip the forced bootstrap-admin password rotation so the
+  # auto-registering agent (and a human using the documented demo creds) can
+  # reach RBAC endpoints immediately. Never enable this in production.
+  backend:
+    environment:
+      VORTEXFLOW_DEMO_MODE: "true"
+
+  demo-agent:
+    build:
+      context: ..
+      dockerfile: docker/demo/agent.Dockerfile
+    image: vortexflow-demo-agent:${VORTEXFLOW_VERSION:-latest}
+    environment:
+      VORTEXFLOW_API: http://backend:8000
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
+    depends_on:
+      backend:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Expose VM so you can poke at the leader/host/agent metrics during the demo.
+  victoriametrics:
+    ports:
+      - "8428:8428"

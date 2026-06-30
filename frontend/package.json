@@ -1,0 +1,64 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "gen:catalog": "tsx scripts/gen-catalog.ts && tsx scripts/gen-catalog-manifest.ts",
+    "gen:catalog-manifest": "tsx scripts/gen-catalog-manifest.ts"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
+    "@monaco-editor/react": "^4.7.0",
+    "@radix-ui/react-dialog": "^1.1.16",
+    "@radix-ui/react-dropdown-menu": "^2.1.17",
+    "@radix-ui/react-label": "^2.1.9",
+    "@radix-ui/react-separator": "^1.1.9",
+    "@radix-ui/react-slot": "^1.2.5",
+    "@radix-ui/react-tabs": "^1.1.14",
+    "@radix-ui/react-tooltip": "^1.2.9",
+    "@xyflow/react": "^12.11.0",
+    "axios": "^1.18.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.18.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "swr": "^2.4.1",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/dagre": "^0.7.54",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.5.0",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "postcss": "^8.5.15",
+    "prettier": "^3.8.4",
+    "tailwindcss": "^3.4.19",
+    "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.22.4",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^6.4.3"
+  }
+}

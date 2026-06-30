@@ -1,0 +1,38 @@
+name: CodeQL
+
+# NOTE: GitHub code scanning is free for PUBLIC repos; on a private repo it needs
+# GitHub Advanced Security. Until this repo is public (Phase D), CodeQL runs only on
+# a weekly schedule + manual trigger so it doesn't redden every push. When public,
+# add `push`/`pull_request` triggers to gate PRs on it.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 06:24 UTC.
+    - cron: '24 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze · ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          language: ${{ matrix.language }}
+          queries: security-and-quality
+
+      # Python + JS/TS are interpreted — no build step needed; autobuild is a no-op.
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3
+        with:
+          category: "/language:${{ matrix.language }}"

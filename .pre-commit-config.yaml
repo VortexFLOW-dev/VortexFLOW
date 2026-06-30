@@ -1,0 +1,31 @@
+repos:
+  # Keep this rev in sync with the ruff in backend/.venv (and CI). A skew makes
+  # `make fmt` (venv ruff) and this hook disagree → the reformat-and-abort dance.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.17
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        files: ^backend/app/(?!services/(auth_|redis_client))
+        additional_dependencies:
+          - pydantic
+          - sqlalchemy[mypy]
+          - types-pyyaml
+          - types-aiofiles
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: detect-private-key

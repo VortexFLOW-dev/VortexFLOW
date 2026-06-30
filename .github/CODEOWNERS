@@ -1,0 +1,17 @@
+# Code owners — GitHub auto-requests review from the owner on matching PRs.
+# Pairs with branch protection's "require review from Code Owners".
+# https://docs.github.com/articles/about-code-owners
+#
+# Last match wins. @jamesbrock owns everything; the explicit security-sensitive
+# paths below exist so that if a second maintainer/team is added later, those
+# surfaces still require the primary owner's review.
+
+*                 @jamesbrock
+
+# Security-sensitive surfaces
+/.github/         @jamesbrock
+/agent/           @jamesbrock
+/docker/          @jamesbrock
+/scripts/         @jamesbrock
+SECURITY.md       @jamesbrock
+LICENSE           @jamesbrock

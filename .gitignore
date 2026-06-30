@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+frontend/node_modules/
+frontend/.pnpm-store/
+frontend/dist/
+frontend/.vite/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.dev
+# (backend/.env.dev.example IS committed — it's the template)
+
+# Local-only working notes (internal status, never for the public repo).
+# CLAUDE.md imports this when present; AGENTS.md is the committed, canonical guide.
+CLAUDE.local.md
+
+# User config
+config/vortexflow.yaml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker
+docker/.env

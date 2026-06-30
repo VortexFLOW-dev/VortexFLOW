@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Light theme (default) ── */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 240 4.8% 95.9%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 172 66% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 90%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 90%;
+    --muted-foreground: 240 3.8% 40%;
+    --accent: 172 66% 36%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5.9% 87%;
+    --input: 240 5.9% 87%;
+    --ring: 172 66% 36%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Dark theme ── */
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 6.5%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 6.5%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 172 66% 50%;
+    --primary-foreground: 240 10% 3.9%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 172 66% 50%;
+    --accent-foreground: 240 10% 3.9%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 172 66% 50%;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@keyframes vf-spin-cw {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes vf-spin-ccw {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+@keyframes vf-pulse-ring {
+  0%, 100% { opacity: 0.08; r: 42; }
+  50%       { opacity: 0.20; r: 46; }
+}
+@keyframes vf-node-glow {
+  0%, 100% { opacity: 0.9; }
+  50%       { opacity: 0.5; }
+}
+@keyframes vf-status-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}

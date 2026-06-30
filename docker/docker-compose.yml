@@ -1,0 +1,127 @@
+name: vortexflow
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vortexflow
+      POSTGRES_USER: vortexflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vortexflow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vortexflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    image: ghcr.io/vortexflow-dev/vortexflow-backend:${VORTEXFLOW_VERSION:-latest}
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      VORTEXFLOW_DATABASE_URL: postgresql+asyncpg://vortexflow:${POSTGRES_PASSWORD:-vortexflow}@postgres:5432/vortexflow
+      VORTEXFLOW_REDIS_URL: redis://redis:6379/0
+      VORTEXFLOW_SECRET_KEY: ${VORTEXFLOW_SECRET_KEY:?secret key required}
+      VORTEXFLOW_VM_URL: http://victoriametrics:8428
+      # External URL agents reach this server at. Required behind the proxy —
+      # used to generate the agent install one-liner + metrics endpoint.
+      VORTEXFLOW_PUBLIC_URL: ${PUBLIC_URL:-}
+      # Shared TLS dir: backend generates a self-signed CA + cert here on first
+      # boot (served to agents at /install/ca.crt); nginx serves it on 443.
+      VORTEXFLOW_TLS_CERT_DIR: /certs
+      # The first admin is created via the one-time setup token printed at
+      # startup (POST to /recovery) — no static default credential is seeded.
+      # ADMIN_EMAIL just names that first admin; there is no ADMIN_PASSWORD here.
+      VORTEXFLOW_BOOTSTRAP_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      # Data retention (daily sweep). 0 = keep forever. Audit logs are
+      # compliance-sensitive, so they default to keep-forever — set deliberately.
+      VORTEXFLOW_AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-0}
+      VORTEXFLOW_EVENT_RETENTION_DAYS: ${EVENT_RETENTION_DAYS:-0}
+      VORTEXFLOW_NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-0}
+    volumes:
+      - certs:/certs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  victoriametrics:
+    # Pinned for reproducible deploys — bump deliberately (see docs/UPGRADING.md).
+    image: victoriametrics/victoria-metrics:v1.144.0
+    command:
+      # Metrics retention — the main disk lever (disk ≈ retention × cardinality).
+      - -retentionPeriod=${VM_RETENTION_PERIOD:-30d}
+      - -storageDataPath=/victoria-metrics-data
+      # Disk safety valve: refuse writes (rather than fill the disk) once free
+      # space drops below this. Default 1 GiB.
+      - -storage.minFreeDiskSpaceBytes=${VM_MIN_FREE_DISK_BYTES:-1073741824}
+    volumes:
+      - vm_data:/victoria-metrics-data
+    healthcheck:
+      # 127.0.0.1 (not localhost) — busybox wget would otherwise try IPv6 ::1,
+      # which VM doesn't listen on, giving a false "connection refused".
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Leader self-monitoring: ships the VortexFlow host's own metrics to VM so the
+  # control plane is observable. Independent — if it can't read host metrics on a
+  # given platform it just degrades, nothing else depends on it.
+  vector-leader:
+    image: timberio/vector:0.56.0-alpine
+    command: ["--config", "/etc/vector/leader.yaml"]
+    environment:
+      PROCFS_ROOT: /host/proc
+      SYSFS_ROOT: /host/sys
+    volumes:
+      - ./vector-leader.yaml:/etc/vector/leader.yaml:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    depends_on:
+      victoriametrics:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Single front door: serves the SPA and reverse-proxies API / install / vm.
+  web:
+    image: ghcr.io/vortexflow-dev/vortexflow-web:${VORTEXFLOW_VERSION:-latest}
+    build:
+      context: ..
+      dockerfile: docker/web.Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Read-only: nginx serves the cert the backend generated.
+      - certs:/etc/nginx/certs:ro
+    depends_on:
+      # Wait for the backend to be healthy so the cert exists before nginx starts.
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  vm_data:
+  certs:

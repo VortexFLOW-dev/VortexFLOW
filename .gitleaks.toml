@@ -1,0 +1,35 @@
+# gitleaks configuration for VortexFlow.
+#
+# Used by the pre-release full-history scan and the Phase C CI secret-scan step.
+# We extend gitleaks' default ruleset and add a tightly-scoped allowlist.
+#
+# POLICY: never commit a real secret to tests. Test fixtures MUST use obviously
+# fake values (e.g. "test-secret-key-…", "ChangeMe123!"). The allowlist below
+# only covers the unit-test directory + a couple of documented placeholders — it
+# does NOT blanket-ignore the codebase, so a real key committed outside tests is
+# still caught.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "VortexFlow allowlist — test fixtures and documented placeholders"
+
+# Unit-test fixtures live here and use deliberately fake secrets; the dev env
+# template ships clearly-labelled DEV-ONLY placeholders (the real backend/.env.dev
+# is git-ignored).
+paths = [
+  '''backend/tests/.*''',
+  '''backend/\.env\.dev\.example''',
+]
+
+# Documented non-secret placeholders that appear in source/config:
+#  - the demo-stack bootstrap password (a known default, gated behind demo_mode)
+#  - the dev SECRET_KEY example in comments / docs
+regexes = [
+  '''ChangeMe123!''',
+  '''test-secret-key-[0-9a-z-]+''',
+  # Sequential-hex placeholder used as a throwaway test SECRET_KEY (obviously not
+  # a real key); it lingered in CI workflow history before being removed.
+  '''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''',
+]

@@ -1,0 +1,79 @@
+# AGENTS.md
+
+Guidance for AI coding agents (and humans) working in the VortexFlow repository.
+This is the canonical, tool-neutral context file; editor-specific files such as
+`CLAUDE.md` point here.
+
+## What VortexFlow is
+
+VortexFlow is an open-source, self-hosted web UI for building, managing, and
+operating [Vector](https://vector.dev) data pipelines — a free alternative to
+commercial pipeline tools. It has **no telemetry, no phone-home, and no license
+check** (see `PRIVACY.md`). Vector is the source of truth: prefer introspecting
+Vector's schema/API over hand-mirroring its behavior.
+
+## Tech stack
+
+- **Backend** — FastAPI (Python 3.12), PostgreSQL (SQLAlchemy async + asyncpg),
+  Redis (sessions, brute-force counters). Package managers: `uv` / `pip`.
+- **Frontend** — React + Vite + TypeScript (strict — **never use `any`**),
+  Tailwind + shadcn/ui, React Flow (`@xyflow/react`), Zustand, SWR, Zod.
+  Package manager: `pnpm`.
+- **Agent** — `vortexflow-agent`, a Go binary (stdlib only) under `agent/`.
+- **Deploy** — Docker Compose + nginx (TLS, SPA, API proxy).
+
+## Local development
+
+Everything is driven through the `Makefile` — run `make help` for the full list.
+
+```bash
+make dev-env        # create backend/.env.dev from the example
+make dev-backend    # API on :8001 (uvicorn, auto-reload)
+make dev-frontend   # SPA on :5173 (Vite, proxies /api → :8001)
+make dev-seed       # seed dev admin: admin@vortexflow.dev / devpassword
+```
+
+Requires a local PostgreSQL and Redis (see `docker-compose.demo.yml` for a
+ready-made stack).
+
+## Before you commit
+
+```bash
+make fmt            # auto-format + autofix the backend — run BEFORE staging
+make lint           # ruff check + format-check + frontend typecheck (tsc)
+make test           # backend unit tests (pytest)
+make sentinel       # contract-drift checks (catalog⟷allowlist, schema, regen)
+make secret-scan    # scan git history for secrets (gitleaks)
+```
+
+CI runs the equivalent of `lint` + `test` + `sentinel` + a frontend `build` + `gitleaks`.
+A change should pass `make lint && make test && make sentinel` locally before it goes up.
+The Sentinel guards the catalog ⟷ accepted-type allowlist ⟷ DB schema contracts;
+`make sentinel-online` adds docker/network checks (schema-vs-real-binary,
+newer-Vector-available).
+
+## Architecture & conventions
+
+- **Request flow:** nginx → `/api/*` to FastAPI (:8000) and `/*` to the React
+  SPA. The backend talks to PostgreSQL, Redis, and each Vector instance's API.
+- **No Alembic.** The schema is provisioned on startup by `_run_schema_upgrades()`
+  in `backend/.../main.py`. **Any new column must be mirrored there** or
+  deployments break. This is the single most common footgun in this repo — the
+  Sentinel's **C2** check (`make sentinel`) now catches a model column with no
+  matching `ALTER` before it ships.
+- **Config rendering** lives in `config_render.py` — it compiles a fleet's
+  components/transforms/routes into Vector YAML. Treat the rendered output as a
+  contract with Vector; validate with `vector validate` / `vector vrl` rather
+  than trusting hand-built strings.
+- **Catalog** of sources/sinks is generated from Vector's schema
+  (`make catalog`), not hand-written — regenerate rather than editing the
+  generated file. The same codegen emits the backend's accepted-type list
+  (`backend/app/data/catalog_types.json`, kind-aware), so the API accepts exactly
+  what the picker offers; the Sentinel's **C1** check keeps the two in lockstep.
+- **Auth:** local (bcrypt + JWT), Personal Access Tokens (`vf_pat_*`, SHA-256 at
+  rest), and SSO (OIDC, Azure, SAML, LDAP). RBAC roles: Admin / Editor / Viewer.
+
+## Security
+
+Never commit secrets, tokens, or certificates. If you find a vulnerability, follow
+`SECURITY.md` (private disclosure) — do **not** open a public issue or PR for it.

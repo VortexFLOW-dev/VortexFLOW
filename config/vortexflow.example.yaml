@@ -1,0 +1,25 @@
+instances:
+  - id: primary
+    label: "Primary Aggregator"
+    api_url: http://localhost:8686
+    config_push:
+      mode: local                 # local | agent | readonly
+      config_dir: /config/vector
+
+  # Example: remote Vector instance via agent mode
+  # - id: edge-us-east
+  #   label: "Edge Collector — US East"
+  #   api_url: http://10.0.2.5:8686
+  #   config_push:
+  #     mode: agent
+  #     agent_url: http://10.0.2.5:7890
+  #     agent_token: ""           # set via env VORTEXFLOW_AGENT_TOKEN_EDGE_US_EAST
+
+auth:
+  enabled: true                   # set to false to disable — a warning banner will be shown
+  mode: single                    # single | multi
+  username: admin
+  password: ""                    # set via env VORTEXFLOW_PASSWORD
+
+ui:
+  theme: dark                     # dark | light | system

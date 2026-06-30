@@ -1,0 +1,38 @@
+version: 2
+updates:
+  # Backend Python deps
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ['dependencies', 'backend']
+
+  # Frontend deps (pnpm-lock.yaml)
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels: ['dependencies', 'frontend']
+
+  # Go agent
+  - package-ecosystem: gomod
+    directory: /agent
+    schedule:
+      interval: weekly
+    labels: ['dependencies', 'agent']
+
+  # Container base images
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+    labels: ['dependencies', 'docker']
+
+  # GitHub Actions used by the workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ['dependencies', 'ci']

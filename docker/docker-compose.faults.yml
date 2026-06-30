@@ -1,0 +1,50 @@
+# Fault-injection overlay — demos UNHEALTHY fleet states so the instance-health
+# panels (backpressure, dropped events, errors, sink delivery) have red signals
+# to show. Layer it on top of the demo:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml \
+#     -f docker-compose.faults.yml up -d
+#
+# Adds a `chaos-agent` in its own "Chaos" fleet whose flaky sink ships to an
+# always-503 endpoint through a drop-when-full buffer. The healthy demo agents
+# are untouched, so you see the contrast (green fleets + one red one + the
+# dashboard "Needs attention" panel lighting up). Demo only — never production.
+name: vortexflow
+
+services:
+  # Always-503 endpoint. Tiny nginx that returns 503 on every request, so the
+  # flaky sink racks up failed deliveries (vector_http_client_responses_total
+  # {status="503"}) and component errors.
+  fault-sink:
+    image: nginx:alpine
+    entrypoint:
+      - sh
+      - -c
+      - |
+        printf 'server { listen 8080; location / { return 503 "fault\n"; } }' \
+          > /etc/nginx/conf.d/default.conf
+        exec nginx -g 'daemon off;'
+    restart: unless-stopped
+
+  # An agent deliberately wired to fail, in its own fleet so it doesn't muddy the
+  # healthy demo. Reuses the demo-agent image (built by the demo overlay).
+  chaos-agent:
+    image: vortexflow-demo-agent:${VORTEXFLOW_VERSION:-latest}
+    container_name: chaos-agent
+    hostname: chaos-agent
+    environment:
+      VORTEXFLOW_API: http://backend:8000
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ChangeMe123!}
+      FLEET_NAME: Chaos
+      HOSTNAME_TAG: chaos-agent
+      INJECT_FAULTS: "true"
+      FAULT_SINK_URL: http://fault-sink:8080/
+    depends_on:
+      backend:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+      fault-sink:
+        condition: service_started
+    restart: unless-stopped

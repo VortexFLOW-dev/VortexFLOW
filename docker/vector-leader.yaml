@@ -1,0 +1,37 @@
+# Leader self-monitoring: ships the VortexFlow host's own metrics to the bundled
+# VictoriaMetrics, so the control plane is observable like any managed node.
+#
+# host_metrics reads the host's /proc and /sys (mounted into this container at
+# /host/...; set via PROCFS_ROOT/SYSFS_ROOT in the compose). On Docker Desktop
+# this reflects the Linux VM rather than the macOS/Windows host.
+
+data_dir: /var/lib/vector
+
+sources:
+  host:
+    type: host_metrics
+    collectors:
+      - cpu
+      - memory
+      - disk
+      - filesystem
+      - load
+      - network
+    namespace: host
+
+  vector:
+    type: internal_metrics
+
+transforms:
+  # Tag everything as the leader so it's distinguishable in VM.
+  tag:
+    type: remap
+    inputs: [host, vector]
+    source: |
+      .tags.host = "vortexflow-leader"
+
+sinks:
+  vm:
+    type: prometheus_remote_write
+    inputs: [tag]
+    endpoint: http://victoriametrics:8428/api/v1/write
