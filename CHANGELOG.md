@@ -8,8 +8,11 @@ its first release.
 
 ## [Unreleased]
 
-VortexFlow is pre-1.0 and under active development; this section tracks work
-toward the first public release.
+## [1.0.0] - 2026-06-30
+
+First public release — a free, self-hosted control plane for Vector fleets:
+build pipelines visually, render and deploy them across a fleet, and operate
+them with staged version rollouts, pre-deploy validation, and live event taps.
 
 ### Added
 - **Fleet manager & deploy engine** — group Vector instances into Fleets, render
@@ -53,4 +56,5 @@ toward the first public release.
 - Remove the unused `authlib` dependency and bump `python-multipart` /
   `cryptography` — backend dependency audit clean.
 
-[Unreleased]: https://github.com/VortexFLOW-dev/VortexFLOW/commits/main
+[Unreleased]: https://github.com/VortexFLOW-dev/VortexFLOW/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/VortexFLOW-dev/VortexFLOW/releases/tag/v1.0.0

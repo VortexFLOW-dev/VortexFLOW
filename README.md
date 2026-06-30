@@ -45,6 +45,12 @@ If you're managing Vector config by hand — juggling YAML files, SSHing into bo
 ## Quick Start
 
 ```bash
+# All commands run from the docker/ directory:
+cd docker
+
+# The demo needs exactly one secret — generate it into .env:
+echo "VORTEXFLOW_SECRET_KEY=$(openssl rand -hex 32)" > .env
+
 # Spin up VortexFlow + a self-registering demo Vector agent
 docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d
 

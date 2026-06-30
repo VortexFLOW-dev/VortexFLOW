@@ -33,6 +33,15 @@ them (local-write mode) or they pull config from it (agent mode). See
 
 ## 1. Get the images
 
+All commands below run from the `docker/` directory. First create your `.env`
+(see [Configure](#2-configure) for the full list — at minimum, set a strong
+`VORTEXFLOW_SECRET_KEY`):
+
+```bash
+cd docker
+cp .env.example .env   # then edit the values, especially VORTEXFLOW_SECRET_KEY
+```
+
 VortexFlow ships multi-arch images. Build them locally from the repo:
 
 ```bash
