@@ -6,7 +6,10 @@
 
 <p align="center"><strong>The open-source control plane for your Vector fleet.</strong> A free, self-hosted GUI for building pipelines and operating them across a whole fleet of Vector instances — render &amp; deploy config, staged version rollouts, pre-deploy validation, and live event taps, all from one UI.</p>
 
-> **Status:** Pre-release — active development. Not yet ready for production use.
+> **Status:** v1.0.0 — first public release. The core is feature-complete and
+> security-reviewed, but it's a young project: it hasn't yet been hardened under
+> heavy load or large multi-fleet deployments. Kick the tires, run it on real
+> fleets, and tell us what breaks — issues and feedback are very welcome.
 
 ---
 

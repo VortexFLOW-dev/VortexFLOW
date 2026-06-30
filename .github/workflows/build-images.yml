@@ -1,12 +1,13 @@
 name: build-images
 
 # Builds and pushes the backend + web images (multi-arch) to GHCR.
-# - push to main      → :latest + :main + :sha
-# - push tag v1.2.3   → :1.2.3 + :1.2 + :sha
-# - manual dispatch    → :sha (and :latest if run on main)
+# Runs only on release tags + manual dispatch (NOT on every push to main), so
+# main stays green and images are published deliberately, at release time.
+# - push tag v1.2.3      → :1.2.3 + :1.2 + :latest + :sha
+# - push tag v1.2.3-rc1  → :1.2.3-rc1 + :sha   (pre-release: no :latest)
+# - manual dispatch      → :sha
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -48,7 +49,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
 
       - name: Build and push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
