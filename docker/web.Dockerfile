@@ -18,7 +18,7 @@ COPY frontend/ ./
 RUN pnpm build
 
 # ── Stage 2: nginx serving SPA + proxy ────────────────────────────────────────
-FROM nginx:1.27-alpine
+FROM nginx:1.31-alpine
 RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/vortexflow.conf
 COPY docker/nginx-locations.conf /etc/nginx/vortexflow-locations.conf
