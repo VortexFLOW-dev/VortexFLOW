@@ -13,7 +13,7 @@ python-multipart==0.0.31
 pyyaml==6.0.2
 aiofiles==25.1.0
 msal==1.36.0
-cryptography==48.0.1
+cryptography==49.0.0
 ldap3==2.9.1
 python3-saml==1.16.0
 email-validator==2.2.0
