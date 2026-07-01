@@ -4,7 +4,7 @@
 #   docker build -f docker/web.Dockerfile -t vortexflow-web .
 
 # ── Stage 1: build the SPA ────────────────────────────────────────────────────
-FROM node:26-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 # Pin pnpm to match the lockfile's toolchain. corepack otherwise pulls the latest
 # pnpm, which handles build-script approval differently.
