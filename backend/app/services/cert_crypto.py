@@ -54,9 +54,11 @@ _EKU_NAMES = {
     ExtendedKeyUsageOID.OCSP_SIGNING: "OCSP Signing",
 }
 
-# Matches one complete PEM block
+# Matches one complete PEM block. Label runs are bounded ({1,40}) so a
+# pathological input can't drive polynomial backtracking on the `[A-Z ]` class
+# (real PEM labels like "ENCRYPTED PRIVATE KEY" are well under 40 chars).
 _PEM_RE = re.compile(
-    rb"-----BEGIN [A-Z ]+-----[\s\S]+?-----END [A-Z ]+-----",
+    rb"-----BEGIN [A-Z ]{1,40}-----[\s\S]+?-----END [A-Z ]{1,40}-----",
     re.MULTILINE,
 )
 
