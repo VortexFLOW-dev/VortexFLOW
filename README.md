@@ -38,9 +38,7 @@ If you're managing Vector config by hand — juggling YAML files, SSHing into bo
 
 | Tool | Price | Self-hosted | Open Source |
 |------|-------|-------------|-------------|
-| Cribl Stream | $$$$ (per GB) | Yes (but heavy) | No |
-| Observo | $$$$ | No | No |
-| Datadog Pipelines | $$$$ | No | No |
+| Commercial pipeline tools | $$$$ (often per-GB) | Limited / SaaS | No |
 | **VortexFlow** | Free | Yes | Yes (MPL 2.0) |
 
 ---

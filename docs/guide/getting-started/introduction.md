@@ -7,8 +7,8 @@ whether data is still flowing. VortexFlow is the cockpit: build pipelines
 visually, deploy them across a whole fleet of Vector hosts, and watch throughput,
 errors, and rollout health from one place.
 
-It is a self-hosted alternative to commercial pipeline managers like Cribl
-Stream, Observo, and Datadog Pipelines — useful to any team running Vector
+It is a free, self-hosted alternative to the commercial observability-pipeline
+managers — useful to any team running Vector
 (platform engineering, DevOps, security operations), regardless of where your
 data ultimately lands.
 
