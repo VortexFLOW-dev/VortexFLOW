@@ -25,7 +25,7 @@ RUN set -eux; \
     done
 
 # ── Stage 2: python deps (build wheels with native toolchain) ─────────────────
-FROM python:3.14-slim AS py-build
+FROM python:3.12-slim AS py-build
 # python3-saml → lxml + xmlsec may need a compiler / xmlsec headers if no wheel
 # is available for the platform. Build into a venv we copy into the runtime.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -37,7 +37,7 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
-FROM python:3.14-slim
+FROM python:3.12-slim
 # Runtime libs for xmlsec/lxml + curl for the container healthcheck.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl libxml2 libxmlsec1 libxmlsec1-openssl \
