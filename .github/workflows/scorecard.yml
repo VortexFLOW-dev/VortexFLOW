@@ -31,7 +31,10 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish_results: true
+          # Publishing to the public OpenSSF webapp 400s on this repo (fresh/unregistered
+          # + non-scheduled runs). Keep the local scan + SARIF→code-scanning upload; skip
+          # the flaky external publish. Re-enable if you want the public Scorecard badge.
+          publish_results: false
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
