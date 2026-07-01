@@ -532,7 +532,11 @@ def write_local_config(config_dir: str, content: str) -> str:
     directory.mkdir(parents=True, exist_ok=True)
     dest = directory / CONFIG_FILENAME
     tmp = str(dest) + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+    # 0o600, not 0o644: the rendered config can contain DECRYPTED secrets on the
+    # deploy path (sink credentials, TLS key passphrases), so it must not be
+    # world-readable. Vector reads it as the owning user (agent/local-write both
+    # run the writer and reader as the same account or root).
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     try:
         os.write(fd, content.encode())
     finally:
