@@ -37,13 +37,6 @@ Yes. Pin a desired Vector version per [fleet](../concepts/fleets.md) and roll
 upgrades out one fleet at a time. See
 [Staged version rollout](../guides/version-rollout.md).
 
-## How is this different from Cribl Stream?
-
-VortexFlow targets the same job — visually building and operating pipelines
-across a fleet — but is free, open source, self-hosted on a small footprint, and
-built natively on Vector and VRL with no proprietary format. Commercial tools add
-breadth (and cost, and lock-in); VortexFlow keeps you on standard Vector.
-
 ## Does VortexFlow do log search or dashboards on my data?
 
 No. It manages the pipeline, not the data flowing through it. Use a log backend
