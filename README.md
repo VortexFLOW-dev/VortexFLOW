@@ -34,15 +34,6 @@ If you're managing Vector config by hand — juggling YAML files, SSHing into bo
 
 ---
 
-## Competitive Comparison
-
-| Tool | Price | Self-hosted | Open Source |
-|------|-------|-------------|-------------|
-| Commercial pipeline tools | $$$$ (often per-GB) | Limited / SaaS | No |
-| **VortexFlow** | Free | Yes | Yes (MPL 2.0) |
-
----
-
 ## Quick Start
 
 ```bash
