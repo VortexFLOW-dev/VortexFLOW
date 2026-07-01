@@ -1,0 +1,72 @@
+# Local DEV backing services for VortexFlow hot-reload development.
+#
+# Spins up ONLY the stateful dependencies (Postgres + Redis + VictoriaMetrics)
+# with host-published ports so a locally-run backend (uvicorn on :8001) and
+# frontend (vite on :5173) can reach them. The app itself is NOT containerized
+# here — run it from source for hot reload. See DEVELOPMENT.md.
+#
+# Fully self-contained: dedicated compose project `vortexflow-devdb`, own named
+# volumes, and non-default host ports (5433/6380/8429) chosen to avoid clashing
+# with other services you may already run locally (a default Postgres on 5432, a
+# default VictoriaMetrics on 8428, etc.).
+#
+# Usage:
+#   docker compose -f docker/docker-compose.devdb.yml up -d
+#   docker compose -f docker/docker-compose.devdb.yml down      # keeps data
+#   docker compose -f docker/docker-compose.devdb.yml down -v   # wipes data
+#
+name: vortexflow-devdb
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vortexflow
+      POSTGRES_USER: vortexflow
+      POSTGRES_PASSWORD: vortexflow
+    ports:
+      - "5433:5432"
+    volumes:
+      - vortexflow_devdb:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vortexflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - vortexflow_devredis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.144.0
+    restart: unless-stopped
+    command:
+      - -retentionPeriod=30d
+      - -storageDataPath=/victoria-metrics-data
+    ports:
+      - "8429:8428"
+    volumes:
+      - vortexflow_devvm:/victoria-metrics-data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8428/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  vortexflow_devdb:
+  vortexflow_devredis:
+  vortexflow_devvm:

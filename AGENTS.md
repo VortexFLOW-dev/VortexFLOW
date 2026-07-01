@@ -27,14 +27,20 @@ Vector's schema/API over hand-mirroring its behavior.
 Everything is driven through the `Makefile` — run `make help` for the full list.
 
 ```bash
+make dev-db         # start dedicated backing services: pg :5433, redis :6380, vm :8429
 make dev-env        # create backend/.env.dev from the example
+make dev-seed       # seed dev admin: admin@vortexflow.dev / devpassword
 make dev-backend    # API on :8001 (uvicorn, auto-reload)
 make dev-frontend   # SPA on :5173 (Vite, proxies /api → :8001)
-make dev-seed       # seed dev admin: admin@vortexflow.dev / devpassword
+make dev-db-down    # stop backing services (keeps data; ARGS=-v wipes)
 ```
 
-Requires a local PostgreSQL and Redis (see `docker-compose.demo.yml` for a
-ready-made stack).
+`make dev-db` brings up VortexFlow's **own** Postgres/Redis/VictoriaMetrics via
+`docker/docker-compose.devdb.yml` — a dedicated compose project (`vortexflow-devdb`)
+with its own volumes and non-default host ports (5433/6380/8429). This keeps the dev
+stack fully isolated from any other project on the box: the DB `vortexflow` is owned by
+the `vortexflow` role (no borrowed roles), and the VM port is 8429 so it never collides
+with a default VictoriaMetrics on 8428. `backend/.env.dev` points at these by default.
 
 ## Before you commit
 

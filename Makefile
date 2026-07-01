@@ -29,6 +29,18 @@ $(ENV): $(BE)/.env.dev.example
 .PHONY: dev-env
 dev-env: $(ENV) ## Create backend/.env.dev from the example if missing
 
+# ── backing services (dedicated dev stack) ───────────────────────────────────
+# Postgres :5433 · Redis :6380 · VictoriaMetrics :8429 — own compose project
+# `vortexflow-devdb`, own volumes; non-default ports avoid clashing with other
+# local services.
+.PHONY: dev-db
+dev-db: ## Start VortexFlow's dedicated dev backing services (pg/redis/vm)
+	docker compose -f docker/docker-compose.devdb.yml up -d
+
+.PHONY: dev-db-down
+dev-db-down: ## Stop the dev backing services (keeps data; add ARGS=-v to wipe)
+	docker compose -f docker/docker-compose.devdb.yml down $(ARGS)
+
 # ── run ──────────────────────────────────────────────────────────────────────
 .PHONY: dev-backend
 dev-backend: $(ENV) ## Run the dev API (uvicorn :8001, auto-reload)
