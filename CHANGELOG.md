@@ -8,6 +8,17 @@ its first release.
 
 ## [Unreleased]
 
+### Changed
+- Dependency updates: `redis` 8, `docker/metadata-action` v6, and routine
+  frontend (monaco-editor, @xyflow/react, radix, eslint, postcss) + backend
+  (asyncpg, anthropic, aiofiles) and base-image (nginx) bumps.
+
+### Security
+- The rendered Vector config is now written `0600` (was `0644`) — on the deploy
+  path it can embed decrypted secrets, so it must not be world-readable.
+- Bounded the PEM-label regex to eliminate a polynomial-ReDoS on CA-chain input.
+- Scoped GitHub Actions write permissions down to the job (top-level read-only).
+
 ## [1.0.0] - 2026-06-30
 
 First public release — a free, self-hosted control plane for Vector fleets:
