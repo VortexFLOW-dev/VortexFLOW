@@ -12,12 +12,14 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyze:
     name: Analyze · ${{ matrix.language }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read          # checkout
+      security-events: write  # upload CodeQL SARIF
     strategy:
       fail-fast: false
       matrix:
