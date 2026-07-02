@@ -66,12 +66,12 @@ jobs:
         run: cd frontend && pnpm install --frozen-lockfile
 
       - name: Frontend license report
-        run: cd frontend && npx --yes license-checker-rseidelsohn --production --markdown > ../frontend-licenses.md || true
+        run: cd frontend && npx --yes license-checker-rseidelsohn@5.0.1 --production --markdown > ../frontend-licenses.md || true
 
       - name: Frontend license gate
         run: |
           cd frontend
-          npx --yes license-checker-rseidelsohn --production \
+          npx --yes license-checker-rseidelsohn@5.0.1 --production \
             --failOn 'GPL-1.0;GPL-2.0;GPL-3.0;GPL-2.0-only;GPL-2.0-or-later;GPL-3.0-only;GPL-3.0-or-later;AGPL-1.0;AGPL-3.0;AGPL-3.0-only;AGPL-3.0-or-later;EUPL-1.2;SSPL-1.0'
           echo "✓ Frontend: no strong copyleft."
 
