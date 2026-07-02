@@ -15,6 +15,7 @@ Contract:
 """
 
 import hashlib
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
@@ -23,14 +24,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.settings import _get_setting
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import verify_password
-from app.models.component import Component
 from app.models.instance import Instance
-from app.models.route import Route
 from app.models.fleet import Fleet
-from app.services import config_render
+from app.services import config_render, deployed_config
 
+log = logging.getLogger("vortexflow.agent")
 router = APIRouter()
 
 
@@ -123,42 +124,32 @@ async def agent_config(
             status_code=status.HTTP_404_NOT_FOUND, detail="Fleet not found"
         )
 
-    comp_result = await db.execute(
-        select(Component)
-        .where(Component.fleet_id == fleet.id)
-        .order_by(Component.created_at)
-    )
-    components = list(comp_result.scalars().all())
-    route_result = await db.execute(
-        select(Route).where(Route.fleet_id == fleet.id).order_by(Route.created_at)
-    )
-    from app.api.v1.fleets import _load_stages
-    from app.services import cert_delivery
-
-    stages, library_vrl = await _load_stages(fleet.id, db)
-    # Agents receive the real runnable config — reveal encrypted secrets and
-    # resolve TLS cert refs to deliverable files. The pull channel is
-    # authenticated (per-agent token) and TLS-encrypted.
-    cert_materials = await cert_delivery.materials_for_components(components, db)
-    rendered = config_render.render_fleet_config(
-        components,
-        list(route_result.scalars().all()),
-        stages,
-        library_vrl,
-        reveal_secrets=True,
-        cert_materials=cert_materials,
-    )
-
-    # Defense in depth: never hand an agent a config with blocking errors (e.g. a
-    # listener bind collision) — it would fail at Vector reload on every member.
-    # The deploy gate prevents publishing such a config, but a live edit between
-    # deploys can transiently produce one. Return 304 so the agent keeps its
-    # last-good config until the operator fixes it.
-    if rendered.errors:
+    # Serve ONLY the last successfully-deployed snapshot — never a live DB render.
+    # This is what makes Deploy the publish gate: an editor's un-deployed edit
+    # cannot reach a host, and an agent never receives config that hasn't passed
+    # `vector validate`. A fleet that has never deployed successfully returns 304,
+    # so the agent keeps its last-good config until an operator deploys.
+    if not fleet.deployed_config:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+    try:
+        snapshot = deployed_config.decode(fleet.deployed_config, settings.secret_key)
+    except Exception:
+        # Snapshot won't decrypt/parse — e.g. VORTEXFLOW_SECRET_KEY was rotated
+        # after this fleet's last deploy. Degrade gracefully: keep the agent on
+        # its last-good config (304) rather than 500. A fresh deploy re-encrypts
+        # the snapshot under the current key.
+        log.warning(
+            "agent %s: deployed_config for fleet %s failed to decrypt; serving 304",
+            instance_id,
+            fleet.id,
+        )
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
+    snap_config = snapshot["config"]
+    snap_files = snapshot["files"]
+    snap_warnings = snapshot["warnings"]
 
     content = config_render.serialize_with_globals(
-        rendered.config,
+        snap_config,
         data_dir=instance.data_dir,
         expire_metrics_secs=instance.expire_metrics_secs,
     )
@@ -178,7 +169,7 @@ async def agent_config(
     files_fingerprint = hashlib.sha256(
         "\x00".join(
             f"{f['path']}:{f['content']}"
-            for f in sorted(rendered.files, key=lambda x: x["path"])
+            for f in sorted(snap_files, key=lambda x: x["path"])
         ).encode()
     ).hexdigest()
     etag = (
@@ -195,9 +186,9 @@ async def agent_config(
     return AgentConfigResponse(
         generation=fleet.generation,
         config_yaml=content,
-        warnings=rendered.warnings,
+        warnings=snap_warnings,
         vector_version=desired_version,
-        files=[AgentFile(**f) for f in rendered.files],
+        files=[AgentFile(**f) for f in snap_files],
     )
 
 

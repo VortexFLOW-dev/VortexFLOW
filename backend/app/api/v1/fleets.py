@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.netutil import client_ip
 from app.core.security import get_password_hash
@@ -19,7 +20,7 @@ from app.models.instance import Instance
 from app.models.route import Route
 from app.models.fleet import Fleet
 from app.models.user import User
-from app.services import audit, cert_delivery, config_render
+from app.services import audit, cert_delivery, config_render, deployed_config
 from app.schemas.fleet import (
     AddInstanceToFleetRequest,
     InstanceInFleet,
@@ -555,6 +556,13 @@ async def deploy_fleet(
             },
         )
 
+    # Snapshot the validated, secret-revealed render. Agents are served THIS
+    # (decrypted at request time), never a live DB render — so an editor's
+    # un-deployed edit can no longer reach a host. Encrypted at rest: it holds
+    # decrypted secrets and cert private keys. Only a successful deploy writes it.
+    fleet.deployed_config = deployed_config.encode(
+        render.config, render.files, render.warnings, settings.secret_key
+    )
     # Publish a new generation. Agents compare this to their applied generation.
     fleet.generation = (fleet.generation or 0) + 1
     db.add(fleet)

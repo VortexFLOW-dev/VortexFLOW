@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from sqlalchemy import String, Boolean, DateTime, Integer, func
+from sqlalchemy import String, Boolean, DateTime, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 import uuid
@@ -21,6 +21,12 @@ class Fleet(Base):
     # Published config generation. Bumped on Deploy/rollback; agents pull the
     # published generation and only reload when it changes.
     generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Fernet-encrypted snapshot of the last SUCCESSFULLY-deployed render (the
+    # config dict + cert files + warnings). Agents are served this snapshot, never
+    # a live DB render, so an un-deployed edit can't reach a host. Encrypted at
+    # rest because it holds decrypted secrets + cert private keys. NULL until the
+    # first successful deploy.
+    deployed_config: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Per-fleet desired Vector version. NULL/empty = inherit the global default
     # (general.desired_vector_version). Lets you roll a version to one fleet at a
     # time instead of all-at-once. Resolved as fleet override → global default.

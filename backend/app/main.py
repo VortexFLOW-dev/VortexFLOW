@@ -234,6 +234,9 @@ async def _run_schema_upgrades():
             )
         )
         await conn.execute(
+            text("ALTER TABLE fleets ADD COLUMN IF NOT EXISTS deployed_config TEXT")
+        )
+        await conn.execute(
             text(
                 "ALTER TABLE components ADD COLUMN IF NOT EXISTS secrets_encrypted TEXT"
             )
