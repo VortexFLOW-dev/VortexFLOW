@@ -54,5 +54,13 @@ COPY --from=vector /usr/bin/vector /usr/local/bin/vector
 ENV VORTEXFLOW_AGENT_BIN_DIR=/app/agent-bin \
     VORTEXFLOW_VECTOR_BIN=/usr/local/bin/vector \
     PYTHONUNBUFFERED=1
+# Run unprivileged. Pre-create + own /certs so the named volume mounted there is
+# writable by this user (the backend generates its self-signed CA/cert here on
+# first boot). No home dir is needed; HOME points at the writable tmpfs.
+RUN useradd --system --uid 10001 --user-group --no-create-home appuser \
+    && mkdir -p /certs \
+    && chown appuser:appuser /certs
+ENV HOME=/tmp
+USER appuser
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
