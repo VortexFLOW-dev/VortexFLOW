@@ -14,10 +14,47 @@ its first release.
   (asyncpg, anthropic, aiofiles) and base-image (nginx) bumps.
 
 ### Security
+- **Agents are served only the last successfully-deployed config.** The agent
+  config endpoint now returns an encrypted snapshot of the config from the last
+  successful deploy (written after `vector validate` passes), never a live DB
+  render — so an editor's un-deployed change can no longer reach a fleet host.
+- **Restricted the public `/vm` proxy to the metrics write endpoint.** It
+  previously reverse-proxied the entire VictoriaMetrics API to the front door,
+  including read/export and the destructive `admin/tsdb/delete_series`.
+- **Server-side session lifecycle.** Logout now revokes the access token,
+  invalidates the refresh token, and ends the session; sessions enforce an idle
+  timeout and an absolute cap; refresh-token replay fails closed; and the client
+  IP is read via a trusted-proxy count so `X-Forwarded-For` can no longer be
+  spoofed to defeat brute-force / IP-block counters.
+- **SSO IdP secrets are no longer sent to the browser.** `client_secret` /
+  `bind_password` are masked on read and preserved on write (mirrors the AI-key
+  handling).
+- The one-time setup/recovery token is armed only on a fresh install or explicit
+  opt-in, instead of being printed to the logs on every boot.
+- SMTP STARTTLS now verifies the mail server's certificate.
+- The install script verifies the downloaded agent binary against a per-arch
+  sha256 embedded from the operator's authenticated session.
+- The backend container runs as a non-root user.
+- Agent-registration rate limiting keys on the real client IP (was the proxy's,
+  i.e. one shared bucket for all agents).
 - The rendered Vector config is now written `0600` (was `0644`) — on the deploy
   path it can embed decrypted secrets, so it must not be world-readable.
 - Bounded the PEM-label regex to eliminate a polynomial-ReDoS on CA-chain input.
 - Scoped GitHub Actions write permissions down to the job (top-level read-only).
+- Pinned the previously-unpinned CI executables (gitleaks, license-checker) and
+  held `cryptography` below 49 (msal caps it).
+
+### Fixed
+- External alerts (webhook/Slack/email) could be silently dropped when a
+  dashboard poll observed a condition transition before the background worker;
+  the dashboard read path now enqueues deliveries too.
+- Metrics-driven events are no longer false-resolved (a spurious "all clear")
+  while VictoriaMetrics is unreachable.
+- Notification deliveries are claimed with `SELECT … FOR UPDATE SKIP LOCKED`, so
+  running multiple backend replicas no longer double-sends.
+- The "add instance to fleet" dialog now lists instances (it read a field that
+  didn't exist on the response).
+- The cert-store key derivation is cached off the async event loop.
 
 ## [1.0.0] - 2026-06-30
 
