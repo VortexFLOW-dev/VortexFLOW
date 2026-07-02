@@ -182,13 +182,41 @@ async def get_all_settings(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> dict:
+    _secret_fields = {
+        "sso_azure": ("client_secret",),
+        "sso_oidc": ("client_secret",),
+        "sso_ldap": ("bind_password",),
+    }
     out: dict[str, dict] = {}
     for key in _VALID_KEYS:
-        out[key] = await _get_setting(key, db)
+        data = await _get_setting(key, db)
+        if key in _secret_fields:
+            data = _mask_secrets(data, *_secret_fields[key])
+        out[key] = data
     return out
 
 
 # ─── Azure Entra ID ──────────────────────────────────────────────────────────
+
+
+def _mask_secrets(data: dict, *fields: str) -> dict:
+    """Replace stored secret values with the MASK sentinel so they never reach
+    the browser. An empty/absent secret stays empty (nothing to hide)."""
+    out = dict(data)
+    for f in fields:
+        if out.get(f):
+            out[f] = MASK
+    return out
+
+
+def _preserve_secrets(new: dict, stored: dict, *fields: str) -> dict:
+    """On write, keep the stored secret when the client sends back the MASK
+    sentinel (or nothing); only a real, new value replaces it."""
+    out = dict(new)
+    for f in fields:
+        if out.get(f) in (MASK, "", None):
+            out[f] = stored.get(f, "")
+    return out
 
 
 @router.get("/sso/azure", response_model=AzureSettings)
@@ -197,7 +225,7 @@ async def get_azure(
     _: User = Depends(require_admin),
 ) -> AzureSettings:
     data = await _get_setting("sso_azure", db)
-    return AzureSettings(**data)
+    return AzureSettings(**_mask_secrets(data, "client_secret"))
 
 
 @router.put("/sso/azure", response_model=AzureSettings)
@@ -206,9 +234,11 @@ async def put_azure(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> AzureSettings:
-    await _put_setting("sso_azure", body.model_dump(), db)
+    stored = await _get_setting("sso_azure", db)
+    payload = _preserve_secrets(body.model_dump(), stored, "client_secret")
+    await _put_setting("sso_azure", payload, db)
     logger.info("Azure SSO settings updated")
-    return body
+    return AzureSettings(**_mask_secrets(payload, "client_secret"))
 
 
 # ─── Generic OIDC ────────────────────────────────────────────────────────────
@@ -220,7 +250,7 @@ async def get_oidc(
     _: User = Depends(require_admin),
 ) -> OidcSettings:
     data = await _get_setting("sso_oidc", db)
-    return OidcSettings(**data)
+    return OidcSettings(**_mask_secrets(data, "client_secret"))
 
 
 @router.put("/sso/oidc", response_model=OidcSettings)
@@ -229,9 +259,11 @@ async def put_oidc(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> OidcSettings:
-    await _put_setting("sso_oidc", body.model_dump(), db)
+    stored = await _get_setting("sso_oidc", db)
+    payload = _preserve_secrets(body.model_dump(), stored, "client_secret")
+    await _put_setting("sso_oidc", payload, db)
     logger.info("OIDC SSO settings updated")
-    return body
+    return OidcSettings(**_mask_secrets(payload, "client_secret"))
 
 
 # ─── SAML 2.0 ────────────────────────────────────────────────────────────────
@@ -398,7 +430,7 @@ async def get_ldap(
     _: User = Depends(require_admin),
 ) -> LdapSettings:
     data = await _get_setting("sso_ldap", db)
-    return LdapSettings(**data)
+    return LdapSettings(**_mask_secrets(data, "bind_password"))
 
 
 @router.put("/sso/ldap", response_model=LdapSettings)
@@ -407,9 +439,11 @@ async def put_ldap(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
 ) -> LdapSettings:
-    await _put_setting("sso_ldap", body.model_dump(), db)
+    stored = await _get_setting("sso_ldap", db)
+    payload = _preserve_secrets(body.model_dump(), stored, "bind_password")
+    await _put_setting("sso_ldap", payload, db)
     logger.info("LDAP settings updated")
-    return body
+    return LdapSettings(**_mask_secrets(payload, "bind_password"))
 
 
 # ─── AI assistant (BYO-LLM) ──────────────────────────────────────────────────
