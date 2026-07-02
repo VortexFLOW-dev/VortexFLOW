@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.netutil import client_ip
 from app.core.security import get_password_hash
 from app.middleware.rbac import require_admin, require_editor, require_viewer
 from app.models.component import Component
@@ -221,7 +222,10 @@ async def register_agent(
     """Self-registration endpoint called by the bootstrap install script.
     Authenticates via the fleet bootstrap token, then creates or updates
     an Instance record for the registering host."""
-    ip = request.client.host if request.client else "unknown"
+    # Use the real client IP (honouring trusted proxies) so the per-IP register
+    # rate limit isn't keyed on nginx's address — otherwise every agent shares
+    # one bucket (both an ineffective throttle and a fleet-wide DoS lever).
+    ip = client_ip(request)
     rate_key = f"register:{ip}"
 
     # Rate limit: block IPs that have repeatedly failed
