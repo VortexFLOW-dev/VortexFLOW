@@ -7,6 +7,11 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     labels: ['dependencies', 'backend']
+    ignore:
+      # msal 1.36.0 requires cryptography<49 — hold the 49+ bump until msal
+      # relaxes the cap (otherwise dependency resolution / Azure SSO breaks).
+      - dependency-name: 'cryptography'
+        versions: ['>=49']
 
   # Frontend deps (pnpm-lock.yaml)
   - package-ecosystem: npm
