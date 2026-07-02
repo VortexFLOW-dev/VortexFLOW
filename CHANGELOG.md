@@ -34,6 +34,9 @@ its first release.
 - SMTP STARTTLS now verifies the mail server's certificate.
 - The install script verifies the downloaded agent binary against a per-arch
   sha256 embedded from the operator's authenticated session.
+- The fleet bootstrap token is now passed in an `X-Bootstrap-Token` request
+  header instead of a URL query string, so it no longer lands in nginx / reverse
+  proxy access logs.
 - The backend container runs as a non-root user.
 - Agent-registration rate limiting keys on the real client IP (was the proxy's,
   i.e. one shared bucket for all agents).

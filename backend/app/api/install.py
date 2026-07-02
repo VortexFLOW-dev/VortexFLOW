@@ -19,7 +19,7 @@ import os
 import re
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.core.config import settings
@@ -113,13 +113,15 @@ def _validate_host(host: str) -> str:
 async def install_script(
     request: Request,
     fleet_id: str,
-    token: str = Query(..., description="Fleet bootstrap token"),
+    # Token in a header, not the URL query — a query string lands in nginx/proxy
+    # access logs and any intermediary; a request header does not.
+    x_bootstrap_token: str = Header(..., alias="X-Bootstrap-Token"),
     host: str | None = Query(
         None, description="VortexFlow base URL (auto-detected from request if omitted)"
     ),
 ) -> PlainTextResponse:
     # Validate token format before hitting the DB (fast reject)
-    if not _TOKEN_RE.match(token):
+    if not _TOKEN_RE.match(x_bootstrap_token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bootstrap token"
         )
@@ -141,7 +143,7 @@ async def install_script(
         )
 
     # Constant-time comparison to prevent timing attacks
-    candidate_hash = hashlib.sha256(token.encode()).hexdigest()
+    candidate_hash = hashlib.sha256(x_bootstrap_token.encode()).hexdigest()
     if not hmac.compare_digest(candidate_hash, fleet.bootstrap_token_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bootstrap token"
@@ -162,7 +164,7 @@ async def install_script(
 
     # Shell-safe values for embedding in the script
     safe_fleet_id = _safe_shell_value(fleet_id)
-    safe_token = _safe_shell_value(token)
+    safe_token = _safe_shell_value(x_bootstrap_token)
     safe_host = _safe_shell_value(host)
     safe_vm_url = _safe_shell_value(f"{host}/vm")
     safe_fleet_name = _safe_shell_value(fleet.name)

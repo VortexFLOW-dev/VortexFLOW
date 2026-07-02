@@ -272,7 +272,7 @@ function BootstrapModal({
 
   const buildInstallCommand = (t: string) => {
     const base = window.location.origin
-    return `curl -sL "${base}/install/fleet/${fleetId}?token=${t}" | sudo bash`
+    return `curl -sL -H "X-Bootstrap-Token: ${t}" "${base}/install/fleet/${fleetId}" | sudo bash`
   }
 
   const generateToken = async () => {

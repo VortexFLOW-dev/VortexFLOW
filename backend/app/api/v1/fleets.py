@@ -311,8 +311,9 @@ async def get_bootstrap_command(
     fleet = await _get_fleet_or_404(fleet_id, db)
     token_set = fleet.bootstrap_token_hash is not None
     command = (
-        f"curl -sL {{YOUR_VORTEXFLOW_URL}}/install/fleet/{fleet_id}"
-        + ("?token=<TOKEN>" if token_set else "")
+        "curl -sL"
+        + (' -H "X-Bootstrap-Token: <TOKEN>"' if token_set else "")
+        + f" {{YOUR_VORTEXFLOW_URL}}/install/fleet/{fleet_id}"
         + " | sudo bash"
     )
     return {"command": command, "token_set": token_set}
