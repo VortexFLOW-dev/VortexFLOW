@@ -10,6 +10,7 @@ import type {
   Fleet,
   FleetResponse,
   FleetWithInstances,
+  Instance,
   NotificationChannel,
   TransformStage,
 } from '@/lib/types'
@@ -126,7 +127,7 @@ export const tokensApi = {
 }
 
 export const instancesApi = {
-  list: () => api.get('/instances'),
+  list: () => api.get<Instance[]>('/instances'),
   fleet: () => api.get<FleetResponse>('/instances/fleet'),
   create: (data: object) => api.post('/instances', data),
   update: (id: string, data: object) => api.patch(`/instances/${id}`, data),

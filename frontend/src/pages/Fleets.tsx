@@ -163,7 +163,7 @@ function AddInstanceModal({
     instancesApi
       .list()
       .then((r) => {
-        const all: Instance[] = r.data.instances ?? []
+        const all: Instance[] = r.data ?? []
         setInstances(all.filter((i) => !existingIds.has(i.id)))
       })
       .catch(() => setError('Failed to load instances'))
