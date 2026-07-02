@@ -61,6 +61,17 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 30
     algorithm: str = "HS256"
 
+    # Session safeguards. Idle: a session is dropped after this many minutes with
+    # no requests (sliding window, Redis-backed). Absolute: a session must
+    # re-authenticate after this many hours regardless of activity. Enforcement
+    # fails open if Redis is unavailable (tokens still expire normally).
+    session_idle_timeout_minutes: int = 45
+    session_absolute_hours: int = 12
+    # Trusted reverse proxies in front of the app (nginx = 1). The client IP is
+    # read this many hops from the right of X-Forwarded-For so a spoofed header
+    # can't forge it. Set 0 if the app is directly exposed (ignore XFF).
+    trusted_proxy_count: int = 1
+
     # Bootstrap admin
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: str = "ChangeMe123!"

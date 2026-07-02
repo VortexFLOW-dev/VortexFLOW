@@ -22,7 +22,12 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(subject: Any, extra: Optional[dict] = None) -> str:
+def create_access_token(
+    subject: Any,
+    sid: Optional[str] = None,
+    sst: Optional[int] = None,
+    extra: Optional[dict] = None,
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
@@ -32,12 +37,20 @@ def create_access_token(subject: Any, extra: Optional[dict] = None) -> str:
         "type": "access",
         "jti": str(_uuid.uuid4()),
     }
+    # sid = session id (Redis-backed idle window); sst = session start epoch
+    # (signed, so the absolute cap is tamper-proof without a Redis lookup).
+    if sid is not None:
+        payload["sid"] = sid
+    if sst is not None:
+        payload["sst"] = sst
     if extra:
         payload.update(extra)
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 
-def create_refresh_token(subject: Any) -> str:
+def create_refresh_token(
+    subject: Any, sid: Optional[str] = None, sst: Optional[int] = None
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.refresh_token_expire_days
     )
@@ -47,6 +60,10 @@ def create_refresh_token(subject: Any) -> str:
         "type": "refresh",
         "jti": str(_uuid.uuid4()),
     }
+    if sid is not None:
+        payload["sid"] = sid
+    if sst is not None:
+        payload["sst"] = sst
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
 

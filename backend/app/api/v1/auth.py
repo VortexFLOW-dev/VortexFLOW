@@ -2,32 +2,33 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.netutil import client_ip
 from app.core.security import (
-    create_access_token,
-    create_refresh_token,
     decode_token,
     get_password_hash,
     verify_password,
 )
-from app.middleware.auth import get_current_user
+from app.middleware.auth import bearer, get_current_user
 from app.models.user import User
 from app.schemas.auth import (
     AuthMethodsResponse,
     ChangePasswordRequest,
     LoginRequest,
+    LogoutRequest,
     MeResponse,
     RefreshRequest,
     TokenResponse,
 )
-from app.services import audit, redis_client
+from app.services import audit, redis_client, session
 from app.services.auth_ldap import LDAPAuthError
 from app.services.auth_ldap import authenticate as ldap_authenticate
 from app.services.sso_config import load_ldap_config
@@ -37,10 +38,7 @@ router = APIRouter()
 
 
 def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 @router.get("/methods", response_model=AuthMethodsResponse)
@@ -128,12 +126,7 @@ async def login(
         # network-level signal independent of per-user success; clearing it lets
         # a shared-NAT attacker reset their record by sharing an IP with a
         # legitimate user.
-        jti = str(uuid.uuid4())
-        access = create_access_token(u.id, extra={"role": u.role, "jti": jti})
-        refresh = create_refresh_token(u.id)
-        refresh_ttl = settings.refresh_token_expire_days * 86400
-        rt = decode_token(refresh)
-        await redis_client.store_refresh_token(rt["jti"], u.id, refresh_ttl)
+        access, refresh = await session.issue(u.id, u.role)
         await audit.record(action="auth.login", user_id=u.id, user_email=u.email, ip=ip)
         return TokenResponse(access_token=access, refresh_token=refresh)
 
@@ -293,10 +286,16 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
-    # Atomic consume — if already used this returns None (replay rejected)
+    # Atomic single-use consume of the refresh token's replay-guard entry.
+    #   - a user id  → valid first use
+    #   - None       → entry absent: already used (replay) or never stored → reject
+    #   - UNAVAILABLE → Redis is down: cannot verify, fail open (tokens still
+    #                   expire on their own TTL; consistent with the rest of auth)
     stored_uid = await redis_client.consume_refresh_token(old_jti)
     user_id = payload.get("sub")
-    if stored_uid is not None and stored_uid != user_id:
+    if stored_uid is redis_client.REDIS_UNAVAILABLE:
+        pass
+    elif stored_uid is None or stored_uid != user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
@@ -308,21 +307,61 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
-    jti = str(uuid.uuid4())
-    access_token = create_access_token(user.id, extra={"role": user.role, "jti": jti})
-    new_refresh = create_refresh_token(user.id)
+    # Enforce idle + absolute cap on refresh too — a still-valid refresh token
+    # must not be able to resurrect a session that has idle-expired or reached
+    # its absolute lifetime.
+    old_sid = payload.get("sid")
+    old_sst = payload.get("sst")
+    if old_sid and not await session.validate(old_sid, old_sst):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired — please log in again",
+        )
 
-    # Register new refresh token JTI so it can be consumed exactly once
-    refresh_ttl = settings.refresh_token_expire_days * 86400
-    new_payload = decode_token(new_refresh)
-    await redis_client.store_refresh_token(new_payload["jti"], user.id, refresh_ttl)
-
+    access_token, new_refresh = await session.issue(
+        user.id, user.role, sid=old_sid, sst=old_sst
+    )
     return TokenResponse(access_token=access_token, refresh_token=new_refresh)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(current_user: User = Depends(get_current_user)) -> None:
-    pass  # Stateless — client discards tokens. JTI revocation added in Phase 5.
+async def logout(
+    body: LogoutRequest | None = None,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Revoke the presented access token for its remaining lifetime, and (if
+    supplied) invalidate the refresh token, so neither can be reused after
+    logout. Session JWTs only — personal access tokens are managed via /tokens.
+    """
+    if credentials:
+        try:
+            payload = decode_token(credentials.credentials)
+        except ValueError:
+            payload = None
+        if payload and payload.get("type") == "access":
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                remaining = int(exp - datetime.now(timezone.utc).timestamp())
+                if remaining > 0:
+                    await redis_client.revoke_token(jti, remaining)
+            # End the session so its other access tokens and the refresh token
+            # stop working immediately, not just the one presented here.
+            await session.end(payload.get("sid"))
+
+    if body and body.refresh_token:
+        try:
+            rp = decode_token(body.refresh_token)
+        except ValueError:
+            rp = None
+        if rp and rp.get("type") == "refresh" and rp.get("jti"):
+            # Single-use consume — the refresh token can no longer mint tokens.
+            await redis_client.consume_refresh_token(rp["jti"])
+
+    await audit.record(
+        action="auth.logout", user_id=current_user.id, user_email=current_user.email
+    )
 
 
 @router.get("/me", response_model=MeResponse)

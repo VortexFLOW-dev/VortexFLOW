@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.api_token import ApiToken
 from app.models.user import User
-from app.services import api_token
+from app.services import api_token, redis_client, session
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -86,6 +86,25 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type"
+        )
+
+    # Reject tokens revoked via logout / admin action. Fails open if Redis is
+    # unavailable (consistent with the rest of the auth path's degradation).
+    jti = payload.get("jti")
+    if jti and await redis_client.is_token_revoked(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Idle timeout + absolute session cap. Fails open if Redis is down; tokens
+    # minted before sessions existed (no sid) are grandfathered until they expire.
+    if not await session.validate(payload.get("sid"), payload.get("sst")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user_id: Optional[str] = payload.get("sub")

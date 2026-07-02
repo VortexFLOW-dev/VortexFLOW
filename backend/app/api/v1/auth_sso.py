@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import logging
 import secrets
-import uuid
 from collections.abc import Awaitable, Callable
 from urllib.parse import urlencode
 
@@ -28,11 +27,11 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import OIDCConfig, settings
+from app.core.config import OIDCConfig
 from app.core.database import get_db
-from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.core.netutil import client_ip
 from app.models.user import User
-from app.services import audit, redis_client
+from app.services import audit, redis_client, session
 from app.services.auth_oidc import (
     OIDCAuthError,
     build_auth_url,
@@ -57,10 +56,7 @@ _STATE_TTL = 600  # seconds an in-flight login may take
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 def _login_redirect(error: str) -> RedirectResponse:
@@ -75,14 +71,7 @@ def _success_redirect(access_token: str, refresh_token: str) -> RedirectResponse
 
 async def _issue_session(user: User, provider: str, ip: str) -> RedirectResponse:
     """Issue a VortexFlow session for an authenticated SSO user and redirect."""
-    access_token = create_access_token(
-        user.id, extra={"role": user.role, "jti": str(uuid.uuid4())}
-    )
-    refresh_token = create_refresh_token(user.id)
-    rt = decode_token(refresh_token)
-    await redis_client.store_refresh_token(
-        rt["jti"], user.id, settings.refresh_token_expire_days * 86400
-    )
+    access_token, refresh_token = await session.issue(user.id, user.role)
     await audit.record(
         action="auth.login",
         user_id=user.id,

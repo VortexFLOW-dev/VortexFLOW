@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
+from app.core.netutil import client_ip
 from app.middleware.auth import get_current_user
 from app.middleware.rbac import require_admin
 from app.models.user import User
@@ -25,10 +26,7 @@ router = APIRouter()
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 @router.get("/schema")

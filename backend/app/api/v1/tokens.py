@@ -22,6 +22,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.netutil import client_ip
 from app.middleware.auth import get_session_user
 from app.models.api_token import ApiToken
 from app.models.user import User
@@ -34,10 +35,7 @@ _MAX_EXPIRY_DAYS = 3650
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 class CreateTokenRequest(BaseModel):

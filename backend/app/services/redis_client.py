@@ -17,9 +17,14 @@ Key namespaces:
 """
 
 import logging
-from typing import Optional
+from typing import Final, Optional
 
 log = logging.getLogger("vortexflow.redis")
+
+# Sentinel: Redis could not be reached, so a lookup's result is unknown. Callers
+# distinguish this from a genuine miss (None) to fail open on outage but closed
+# on a real replay/absence.
+REDIS_UNAVAILABLE: Final = object()
 
 _client = None  # redis.asyncio.Redis | None
 
@@ -72,14 +77,54 @@ async def store_refresh_token(jti: str, user_id: str, ttl_seconds: int) -> None:
         log.warning(f"Redis store_refresh_token failed: {e}")
 
 
-async def consume_refresh_token(jti: str) -> Optional[str]:
+async def consume_refresh_token(jti: str) -> Optional[str] | object:
+    """Atomically read+delete a refresh token's replay-guard entry.
+
+    Returns the stored user id (valid single use), ``None`` if the entry is
+    absent (already consumed → replay, or never stored), or
+    ``REDIS_UNAVAILABLE`` if Redis could not be reached (caller fails open).
+    """
     r = await _get()
     if r is None:
-        return None
+        return REDIS_UNAVAILABLE
     try:
         return await r.getdel(f"rt:{jti}")  # type: ignore[attr-defined]
     except Exception:
-        return None
+        return REDIS_UNAVAILABLE
+
+
+async def start_session(sid: str, user_id: str, ttl_seconds: int) -> None:
+    """Create/re-arm a session's idle window."""
+    r = await _get()
+    if r is None:
+        return
+    try:
+        await r.set(f"session:{sid}", user_id, ex=ttl_seconds)  # type: ignore[attr-defined]
+    except Exception as e:
+        log.warning(f"Redis start_session failed: {e}")
+
+
+async def touch_session(sid: str, ttl_seconds: int) -> bool:
+    """Slide the idle window. Returns True if the session is still alive (or if
+    Redis is unavailable — fail open), False if it has idle-expired."""
+    r = await _get()
+    if r is None:
+        return True  # degrade open — do not lock users out on a Redis outage
+    try:
+        return bool(await r.expire(f"session:{sid}", ttl_seconds))  # type: ignore[attr-defined]
+    except Exception:
+        return True
+
+
+async def end_session(sid: str) -> None:
+    """Terminate a session immediately (logout)."""
+    r = await _get()
+    if r is None:
+        return
+    try:
+        await r.delete(f"session:{sid}")  # type: ignore[attr-defined]
+    except Exception as e:
+        log.warning(f"Redis end_session failed: {e}")
 
 
 async def set_sso_state(state: str, ttl: int = 600) -> None:

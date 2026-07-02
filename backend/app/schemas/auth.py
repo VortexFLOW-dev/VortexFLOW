@@ -20,6 +20,12 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutRequest(BaseModel):
+    # Optional: supplying the refresh token lets the server invalidate it so it
+    # can no longer mint access tokens. The access token is always revoked.
+    refresh_token: str | None = None
+
+
 class AuthMethodsResponse(BaseModel):
     local: bool = True
     azure: bool = False
