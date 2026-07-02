@@ -55,7 +55,7 @@ export default function Flow() {
     instancesApi
       .list()
       .then((r) => {
-        const list = (r.data.instances ?? r.data ?? []) as { id: string; fleet_id: string | null }[]
+        const list = (r.data ?? []) as { id: string; fleet_id: string | null }[]
         setTapInstanceId(list.find((i) => i.fleet_id === fleetId)?.id ?? null)
       })
       .catch(() => setTapInstanceId(null))
