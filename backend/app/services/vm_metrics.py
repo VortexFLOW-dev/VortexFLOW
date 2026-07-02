@@ -56,6 +56,23 @@ async def query_instant(promql: str) -> dict[str, float]:
         return {}
 
 
+async def vm_reachable() -> bool:
+    """Cheap health probe — is VictoriaMetrics answering queries right now?
+
+    Lets the event detector distinguish a real VM outage (metrics unavailable)
+    from a genuine zero, so it doesn't false-resolve metrics-driven events and
+    fire an "all clear" while the condition may actually persist.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(
+                f"{settings.vm_url}/api/v1/query", params={"query": "1"}
+            )
+            return resp.status_code == 200
+    except Exception:
+        return False
+
+
 # Throughput series metric: events/sec vs bytes/sec (chart toggle).
 _SERIES_METRIC = {
     "events": "vector_component_sent_events_total",

@@ -30,7 +30,7 @@ from app.services.fleet_view import (
     hostname,
     is_agent_offline,
 )
-from app.services.vm_metrics import fetch_fleet_metrics
+from app.services.vm_metrics import fetch_fleet_metrics, vm_reachable
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +51,8 @@ async def detect_and_record(db: AsyncSession) -> tuple[list[Event], list[Event]]
     the caller (a dashboard GET or the background worker)."""
     try:
         desired = await _desired_vector_version(db)
-        active = await _active_conditions(db, desired)
-        return await _reconcile(db, active)
+        active, vm_up = await _active_conditions(db, desired)
+        return await _reconcile(db, active, vm_up)
     except Exception as e:  # pragma: no cover - defensive
         logger.warning(f"event detection failed: {e}")
         return [], []
@@ -65,8 +65,14 @@ async def _desired_vector_version(db: AsyncSession) -> str:
     return str(general.get("desired_vector_version", "") or "")
 
 
-async def _active_conditions(db: AsyncSession, desired: str) -> dict[str, dict]:
-    """Return {dedup_key: event-fields} for every condition currently active."""
+async def _active_conditions(
+    db: AsyncSession, desired: str
+) -> tuple[dict[str, dict], bool]:
+    """Return ({dedup_key: event-fields} for active conditions, vm_up).
+
+    ``vm_up`` reports whether VictoriaMetrics answered — reconciliation uses it to
+    avoid false-resolving metrics-driven events during a VM outage.
+    """
     now = datetime.now(timezone.utc)
     active: dict[str, dict] = {}
 
@@ -82,6 +88,9 @@ async def _active_conditions(db: AsyncSession, desired: str) -> dict[str, dict]:
     fleet_map = {f.id: f for f in (await db.execute(select(Fleet))).scalars().all()}
     # Live per-instance health (data loss / sink delivery) from VictoriaMetrics.
     vm = await fetch_fleet_metrics([hostname(i.api_url) for i in instances])
+    # Is VM actually answering? A metrics outage makes drops/sink-fail read as 0,
+    # which must NOT be mistaken for the condition clearing (see _reconcile).
+    vm_up = await vm_reachable()
     for i in instances:
         fleet = fleet_map.get(i.fleet_id) if i.fleet_id else None
         eff_desired = effective_vector_version(fleet, desired)
@@ -166,11 +175,16 @@ async def _active_conditions(db: AsyncSession, desired: str) -> dict[str, dict]:
                 "resource_id": c.id,
             }
 
-    return active
+    return active, vm_up
+
+
+# Event kinds derived from VictoriaMetrics — must not be resolved while VM is
+# unreachable (absent metrics would otherwise look like the condition cleared).
+_VM_METRIC_KINDS = {"instance_dropping", "instance_sink_failing"}
 
 
 async def _reconcile(
-    db: AsyncSession, active: dict[str, dict]
+    db: AsyncSession, active: dict[str, dict], vm_up: bool
 ) -> tuple[list[Event], list[Event]]:
     open_events = (
         (await db.execute(select(Event).where(Event.resolved_at.is_(None))))
@@ -206,6 +220,11 @@ async def _reconcile(
     # Resolve open events whose condition has cleared.
     for e in open_events:
         if e.dedup_key not in active:
+            if not vm_up and e.kind in _VM_METRIC_KINDS:
+                # VM is unreachable — a metrics-driven event's absence from the
+                # active set just means the metrics vanished, not that the
+                # condition cleared. Keep it open to avoid a false "all clear".
+                continue
             e.resolved_at = now
             resolved.append(e)
 
