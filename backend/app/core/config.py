@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str = "ChangeMe123!"
     bootstrap_admin_name: str = "Admin"
 
+    # Break-glass recovery. The one-time setup/recovery token is normally armed
+    # only on a fresh install (no admin yet). Set this true to force-arm it for
+    # a genuine locked-out-admin recovery, then unset it — otherwise a fresh
+    # admin-granting token is printed to the logs on every restart.
+    enable_recovery_token: bool = False
+
     # Demo mode (docker-compose.demo.yml only). Skips the forced bootstrap-admin
     # password rotation so the auto-registering demo agent — and a human poking
     # the UI with the documented demo creds — can use RBAC endpoints out of the

@@ -33,13 +33,15 @@ async def lifespan(app: FastAPI):
     _bootstrap_tls()
 
     # One-time setup / break-glass recovery token — stored in Redis, single-use,
-    # 1h TTL. On a fresh install it creates the first admin (POST to /recovery);
-    # thereafter it resets admin access. No static default credential is seeded.
-    token = secrets.token_urlsafe(32)
-    from app.api.v1.recovery import set_recovery_token
+    # 1h TTL. Armed only when genuinely needed (a fresh install with no admin
+    # yet, or an explicit opt-in for a locked-out-admin recovery) so a fresh
+    # admin-granting token is not printed to the logs on every restart.
+    if await _needs_recovery_token():
+        token = secrets.token_urlsafe(32)
+        from app.api.v1.recovery import set_recovery_token
 
-    await set_recovery_token(token)
-    logger.warning(f"SETUP / RECOVERY TOKEN (single-use, 1h): {token}")
+        await set_recovery_token(token)
+        logger.warning(f"SETUP / RECOVERY TOKEN (single-use, 1h): {token}")
 
     # Background worker: detect events + deliver notifications independent of the
     # UI, so alerts fire even when no dashboard is open.
@@ -381,6 +383,28 @@ async def _bootstrap_admin():
         session.add(admin)
         await session.commit()
         logger.info(f"Demo admin created: {settings.bootstrap_admin_email}")
+
+
+async def _needs_recovery_token() -> bool:
+    """Whether to arm the setup/recovery token at startup.
+
+    True on a fresh install (no active admin account yet) or when explicitly
+    opted in via ``enable_recovery_token``. Steady-state restarts with a working
+    admin never print an admin-granting token to the logs.
+    """
+    if settings.enable_recovery_token:
+        return True
+    from sqlalchemy import func, select
+    from app.core.database import AsyncSessionLocal
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as session:
+        active_admins = await session.scalar(
+            select(func.count())
+            .select_from(User)
+            .where(User.role == "admin", User.is_active.is_(True))
+        )
+    return not active_admins
 
 
 async def _bootstrap_default_fleet():
