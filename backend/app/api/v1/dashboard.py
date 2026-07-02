@@ -118,13 +118,19 @@ async def dashboard_summary(
             }
         )
 
-    # Reconcile fleet events for instant in-app bell freshness when a tab is open
-    # (idempotent, best-effort). Outbound notification enqueue + dispatch is owned
-    # solely by the background worker, so it stays the single delivery driver and
-    # this read path never blocks on (or duplicates) notification work.
+    # Reconcile fleet events for instant in-app bell freshness when a tab is open,
+    # AND enqueue delivery outbox rows for any transition observed here. Without
+    # the enqueue, a dashboard poll that beats the 30s worker tick consumes the
+    # transition (records the event) and the worker's next pass sees nothing to
+    # enqueue — silently dropping the external (webhook/Slack/email) alert. Both
+    # calls are idempotent (unique index + ON CONFLICT DO NOTHING), and the
+    # background worker remains the sole *dispatcher* (send) of the outbox, so this
+    # read path never sends and never double-delivers.
     from app.services.event_detector import detect_and_record
+    from app.services.notify import enqueue_deliveries
 
-    await detect_and_record(db)
+    opened, resolved = await detect_and_record(db)
+    await enqueue_deliveries(db, opened, resolved)
 
     return {
         "system": system,
