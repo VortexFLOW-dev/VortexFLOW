@@ -15,6 +15,7 @@ import json
 import os
 import re
 from datetime import timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -25,9 +26,13 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 
+@lru_cache(maxsize=8)
 def _fernet(secret_key: str) -> Fernet:
     # PBKDF2-HMAC-SHA256 with fixed app-level salt — provides key stretching
-    # so DB + key leak alone is insufficient for offline brute force.
+    # so DB + key leak alone is insufficient for offline brute force. Cached:
+    # the derived key depends only on secret_key (fixed salt/iterations), so this
+    # 260k-iteration derivation runs once per process instead of per encrypt or
+    # decrypt call — it was blocking the event loop on every component read.
     key_bytes = hashlib.pbkdf2_hmac(
         "sha256",
         secret_key.encode(),
