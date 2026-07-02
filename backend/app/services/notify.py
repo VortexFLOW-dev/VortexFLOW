@@ -166,13 +166,18 @@ async def _insert_delivery(
 
 
 async def dispatch_pending(db: AsyncSession) -> int:
-    """Drain due pending deliveries. Returns the number attempted. Called only
-    by the background worker, so deliveries have a single driver."""
+    """Drain due pending deliveries. Returns the number attempted.
+
+    Each row is claimed with SELECT ... FOR UPDATE SKIP LOCKED before its send, so
+    running more than one dispatcher (e.g. multiple backend replicas) cannot
+    double-send: a row locked by one worker is skipped by the others, and the
+    per-row commit both persists the outcome and releases the lock.
+    """
     now = datetime.now(timezone.utc)
-    rows = (
+    candidate_ids = (
         (
             await db.execute(
-                select(NotificationDelivery)
+                select(NotificationDelivery.id)
                 .where(
                     NotificationDelivery.status == "pending",
                     NotificationDelivery.next_attempt_at <= now,
@@ -184,10 +189,29 @@ async def dispatch_pending(db: AsyncSession) -> int:
         .scalars()
         .all()
     )
-    if not rows:
+    if not candidate_ids:
         return 0
 
-    for d in rows:
+    attempted = 0
+    for d_id in candidate_ids:
+        # Claim the row exclusively for the duration of this send. SKIP LOCKED
+        # makes a concurrent dispatcher move on rather than block or double-send;
+        # the status filter drops rows already processed since the candidate list
+        # was read.
+        d = (
+            await db.execute(
+                select(NotificationDelivery)
+                .where(
+                    NotificationDelivery.id == d_id,
+                    NotificationDelivery.status == "pending",
+                )
+                .with_for_update(skip_locked=True)
+            )
+        ).scalar_one_or_none()
+        if d is None:
+            continue
+        attempted += 1
+
         channel = await db.get(NotificationChannel, d.channel_id)
         event = await db.get(Event, d.event_id)
         if channel is None or event is None:
@@ -212,12 +236,12 @@ async def dispatch_pending(db: AsyncSession) -> int:
                 channel.last_success_at = now2
                 channel.last_attempt_at = now2
                 channel.last_error = None
-        # Commit per row: each _send is an external POST/email, so persisting the
-        # outcome immediately bounds duplicate sends to one in-flight message if
-        # the worker is cancelled (shutdown) mid-batch.
+        # Commit per row: releases the FOR UPDATE lock and persists the outcome
+        # immediately, so an external _send that already went out is not repeated
+        # if the worker is cancelled (shutdown) mid-batch.
         await db.commit()
 
-    return len(rows)
+    return attempted
 
 
 async def _resolve_ready(db: AsyncSession, d: NotificationDelivery) -> bool:
