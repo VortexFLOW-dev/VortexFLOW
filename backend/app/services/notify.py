@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import smtplib
+import ssl
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -414,7 +415,9 @@ def _smtp_send(
 ) -> None:
     with smtplib.SMTP(host, port, timeout=SMTP_TIMEOUT) as server:
         if use_tls:
-            server.starttls()
+            # Verify the mail server's certificate + hostname (default context)
+            # so SMTP credentials can't be MITM'd on the path to the relay.
+            server.starttls(context=ssl.create_default_context())
         if username and password:
             server.login(username, password)
         server.send_message(msg)
