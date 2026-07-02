@@ -167,6 +167,28 @@ async def install_script(
     safe_vm_url = _safe_shell_value(f"{host}/vm")
     safe_fleet_name = _safe_shell_value(fleet.name)
 
+    # sha256 of the agent binaries this server will serve, per arch. Embedded in
+    # the script so the download can be verified against a value the operator got
+    # over their authenticated admin session — not the agent host's download
+    # channel (whose TLS root may be trust-on-first-use). Closes the "no integrity
+    # check independent of TLS" gap. Empty if a binary isn't present server-side.
+    from app.core.config import settings as _bin_settings
+
+    def _agent_sha(goarch: str) -> str:
+        try:
+            with open(
+                os.path.join(
+                    _bin_settings.agent_bin_dir, f"vortexflow-agent-linux-{goarch}"
+                ),
+                "rb",
+            ) as fh:
+                return hashlib.sha256(fh.read()).hexdigest()
+        except OSError:
+            return ""
+
+    sha_amd64 = _agent_sha("amd64")
+    sha_arm64 = _agent_sha("arm64")
+
     # The vm_url is also embedded inside the VECTOREOF heredoc (YAML value, not shell)
     # Use the raw string only — we've already validated host is a proper URL
     vm_endpoint = f"{host}/vm/api/v1/write"
@@ -279,6 +301,24 @@ case "${{ARCH}}" in
 esac
 echo "→ Downloading agent (linux/${{GOARCH}})..."
 curl -fsSL ${{CURL_CA}} "${{VORTEXFLOW_URL}}/install/agent/linux/${{GOARCH}}" -o "${{AGENT_BIN}}"
+# Verify the download against the checksum embedded in this script (delivered via
+# the operator's authenticated session, not this host's download channel), so a
+# tampered binary is rejected even if the download's TLS root is trust-on-first-use.
+case "${{GOARCH}}" in
+  amd64) EXPECTED_SHA="{sha_amd64}" ;;
+  arm64) EXPECTED_SHA="{sha_arm64}" ;;
+  *) EXPECTED_SHA="" ;;
+esac
+if [ -n "$EXPECTED_SHA" ]; then
+  ACTUAL_SHA=$(sha256sum "${{AGENT_BIN}}" | awk '{{print $1}}')
+  if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+    echo "ERROR: agent binary checksum mismatch — refusing to install." >&2
+    rm -f "${{AGENT_BIN}}"; exit 1
+  fi
+  echo "→ Agent binary checksum verified."
+else
+  echo "WARNING: no checksum available for linux/${{GOARCH}}; skipping verification." >&2
+fi
 chmod 0755 "${{AGENT_BIN}}"
 
 # Agent credentials — root-owned, 0600 (holds the agent token). AGENT_CA_CERT is
