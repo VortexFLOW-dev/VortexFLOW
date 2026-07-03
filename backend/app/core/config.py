@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     # internal backend address, which agents can't reach.
     public_url: Optional[str] = None
 
+    # Extra browser origins allowed to call the API with credentials (CORS),
+    # comma-separated. The standard deployment serves the UI from the same origin
+    # as the API (nginx in front of this backend), which needs no entry here; set
+    # this only when the UI is hosted on a different origin. `public_url` is
+    # allowed automatically, and localhost dev origins are added when debug=True.
+    cors_origins: str = ""
+
     # Database
     database_url: str = (
         "postgresql+asyncpg://vortexflow:vortexflow@localhost:5432/vortexflow"

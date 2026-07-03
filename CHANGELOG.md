@@ -42,6 +42,10 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- CORS allowed origins are now configurable (`VORTEXFLOW_CORS_ORIGINS`, plus the
+  `public_url`) and the hardcoded `localhost` dev origins are emitted only when
+  `debug` is set. A production build no longer ships credentialed CORS access for
+  `localhost:5173` / `localhost:3000`.
 - Creating a personal access token now enforces the forced-password-change gate.
   A PAT inherits its owner's role, so a user required to rotate their password
   could previously mint one and use it to bypass the gate; token creation now

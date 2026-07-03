@@ -69,9 +69,34 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def _cors_origins() -> list[str]:
+    """Browser origins allowed to call the API with credentials.
+
+    Because ``allow_credentials=True`` cannot combine with a ``*`` wildcard, the
+    list is explicit: the configured ``public_url`` (the same-origin UI), any
+    operator-supplied ``cors_origins``, and — only in debug — the localhost dev
+    origins (the Vite dev server proxies ``/api``, so these are just for direct
+    API access). A production build ships none of the dev origins."""
+    origins: list[str] = []
+    if settings.public_url:
+        origins.append(settings.public_url.rstrip("/"))
+    origins += [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    if settings.debug:
+        origins += ["http://localhost:5173", "http://localhost:3000"]
+    # De-duplicate, preserving order.
+    seen: set[str] = set()
+    unique: list[str] = []
+    for o in origins:
+        if o not in seen:
+            seen.add(o)
+            unique.append(o)
+    return unique
+
+
 app.add_middleware(  # type: ignore[attr-defined]
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
