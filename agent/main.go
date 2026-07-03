@@ -34,7 +34,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	agent := NewAgent(cfg, NewClient(cfg), NewVector(cfg))
+	client, err := NewClient(cfg)
+	if err != nil {
+		log.Fatalf("client error: %v", err)
+	}
+	agent := NewAgent(cfg, client, NewVector(cfg))
 	agent.Run(ctx)
 
 	os.Exit(0)

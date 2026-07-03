@@ -27,24 +27,32 @@ type Client struct {
 }
 
 // NewClient builds a control-plane client. InsecureTLS disables certificate
-// verification (dev only).
-func NewClient(cfg Config) *Client {
+// verification (dev only). A configured-but-unusable AGENT_CA_CERT is a fatal
+// error rather than a silent fallback to the system trust store.
+func NewClient(cfg Config) (*Client, error) {
 	transport := &http.Transport{}
 	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
 	if cfg.InsecureTLS {
 		tlsCfg.InsecureSkipVerify = true //nolint:gosec // opt-in dev flag
+		log.Printf("WARNING: AGENT_INSECURE_SKIP_VERIFY is set — TLS certificate " +
+			"verification is DISABLED. Control-plane traffic (config, tokens, certs) " +
+			"can be intercepted or forged. Use only on a trusted dev network.")
 	} else if cfg.CACertPath != "" {
-		// Trust the leader's (self-signed) CA without disabling verification.
-		if pem, err := os.ReadFile(cfg.CACertPath); err == nil {
-			pool := x509.NewCertPool()
-			if pool.AppendCertsFromPEM(pem) {
-				tlsCfg.RootCAs = pool
-			} else {
-				log.Printf("warning: no certs parsed from AGENT_CA_CERT %s", cfg.CACertPath)
-			}
-		} else {
-			log.Printf("warning: cannot read AGENT_CA_CERT %s: %v", cfg.CACertPath, err)
+		// Trust the leader's (self-signed) CA without disabling verification. The
+		// operator explicitly configured a CA, so a missing/unreadable/unparseable
+		// file is a misconfiguration — fail fast instead of silently falling back
+		// to the system roots (which would then reject a self-signed leader with a
+		// confusing error, or trust the wrong roots).
+		pem, err := os.ReadFile(cfg.CACertPath)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read AGENT_CA_CERT %s: %w", cfg.CACertPath, err)
 		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf(
+				"no certificates parsed from AGENT_CA_CERT %s", cfg.CACertPath)
+		}
+		tlsCfg.RootCAs = pool
 	}
 	transport.TLSClientConfig = tlsCfg
 	return &Client{
@@ -52,7 +60,7 @@ func NewClient(cfg Config) *Client {
 		instanceID: cfg.InstanceID,
 		token:      cfg.Token,
 		http:       &http.Client{Timeout: 30 * time.Second, Transport: transport},
-	}
+	}, nil
 }
 
 // ConfigResult is the outcome of a config poll.
@@ -97,6 +105,11 @@ func (c *Client) FetchConfig(ctx context.Context, prevETag string) (ConfigResult
 	case http.StatusNotModified:
 		return ConfigResult{NotModified: true, ETag: prevETag}, nil
 	case http.StatusOK:
+		// Cap the body: the agent runs as root and the server is the only writer,
+		// but a compromised/misbehaving control plane must not be able to OOM the
+		// host with an unbounded response. 32 MiB comfortably covers a config plus
+		// inlined cert material.
+		const maxConfigBytes = 32 << 20
 		var body struct {
 			Generation    int          `json:"generation"`
 			ConfigYAML    string       `json:"config_yaml"`
@@ -104,7 +117,8 @@ func (c *Client) FetchConfig(ctx context.Context, prevETag string) (ConfigResult
 			Warnings      []string     `json:"warnings"`
 			Files         []ConfigFile `json:"files"`
 		}
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		dec := json.NewDecoder(io.LimitReader(resp.Body, maxConfigBytes))
+		if err := dec.Decode(&body); err != nil {
 			return ConfigResult{}, fmt.Errorf("decode config: %w", err)
 		}
 		return ConfigResult{

@@ -86,6 +86,11 @@ its first release.
   boolean `password`/`api_key`) is now encrypted at rest like any other secret;
   previously only string secrets were extracted, so a non-string value fell
   through to plaintext `config_json` and showed in config previews / API reads.
+- Agent TLS hardening: the agent now logs a prominent warning when
+  `AGENT_INSECURE_SKIP_VERIFY` disables certificate verification; a configured
+  but unreadable/unparseable `AGENT_CA_CERT` is now a fatal startup error instead
+  of a silent fallback to the system trust store; and the config-poll response
+  body is capped (32 MiB) so a misbehaving control plane can't OOM the host.
 - The root agent now confines every server-supplied cert-file write to the
   managed component-certs directory (rejecting absolute paths outside it and
   `..` traversal), so a compromised or malicious control plane can no longer
