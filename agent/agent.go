@@ -40,6 +40,7 @@ type Agent struct {
 	healthy        bool   // is Vector running the applied config
 	vectorVersion  string // installed Vector semver (reported in status)
 	desiredVersion string // fleet-wide desired version from the control plane
+	failedVersion  string // last desired version that failed to converge (anti-storm)
 }
 
 func NewAgent(cfg Config, client *Client, vector *Vector) *Agent {
@@ -161,15 +162,32 @@ func (a *Agent) reconcileVersion(ctx context.Context) {
 			a.vectorVersion, want)
 		return
 	}
+	// Anti-storm: reconcileVersion runs every poll (incl. 304s). If this exact
+	// target already failed to converge, don't re-run the (expensive/destructive)
+	// install + Vector restart every interval — wait until the desired version
+	// changes. A malicious/mistaken control plane pinning an unattainable version
+	// would otherwise thrash the package manager and bounce Vector forever.
+	if want == a.failedVersion {
+		return
+	}
 	log.Printf("updating vector %q -> %q", a.vectorVersion, want)
 	if err := a.vector.Install(ctx, want); err != nil {
 		log.Printf("vector update failed: %v", err)
+		a.failedVersion = want
 		return
 	}
 	if err := a.vector.reload(ctx); err != nil {
 		log.Printf("vector restart after update failed: %v", err)
 	}
 	a.vectorVersion = a.vector.Version(ctx)
+	if a.vectorVersion != want {
+		// Install ran but the version didn't converge — stop retrying this target.
+		log.Printf("vector still %q after update to %q; not retrying until the desired version changes",
+			a.vectorVersion, want)
+		a.failedVersion = want
+		return
+	}
+	a.failedVersion = "" // converged
 	log.Printf("vector now %q", a.vectorVersion)
 }
 

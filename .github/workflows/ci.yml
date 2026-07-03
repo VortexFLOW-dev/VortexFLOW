@@ -125,19 +125,33 @@ jobs:
         continue-on-error: true
 
   agent:
-    name: Agent · vet · build · test
+    name: Agent · vet · build · test · scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # The Go agent runs as root on fleet hosts, so its safety checks (e.g.
-      # confining server-supplied cert paths to the managed dir) must be tested.
-      # Build in the golang container — mirrors the Makefile `agent-build`
-      # fallback — so no separate toolchain pin is needed.
-      - name: Go vet · build · test (golang container)
+      # confining server-supplied cert paths to the managed dir) must be tested +
+      # scanned. Build in the golang container — mirrors the Makefile
+      # `agent-build` fallback — so no separate toolchain pin is needed.
+      - name: Go vet · build · test · govulncheck (golang container)
         run: |
           docker run --rm -v "$PWD/agent":/src -w /src -e CGO_ENABLED=0 \
-            golang:1.26 sh -c 'go vet ./... && go build -o /tmp/agent . && go test ./...'
+            golang:1.26 sh -c '
+              go vet ./... &&
+              go build -o /tmp/agent . &&
+              go test ./... &&
+              go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 ./...'
+
+      # gosec is a security linter; the agent has known low-severity G104
+      # (unhandled error on best-effort cleanup) findings, so surface it
+      # informationally rather than gating — same convention as mypy/eslint here.
+      - name: gosec (informational)
+        continue-on-error: true
+        run: |
+          docker run --rm -v "$PWD/agent":/src -w /src -e CGO_ENABLED=0 \
+            golang:1.26 sh -c \
+            'go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet ./...'
 
   secrets:
     name: Secret scan · gitleaks

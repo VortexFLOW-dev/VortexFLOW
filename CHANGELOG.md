@@ -126,6 +126,14 @@ its first release.
 - The agent rejects a non-semver `vector_version` from the control plane before
   it can be substituted into the operator's install command, preventing argument
   or shell-metacharacter injection into that root-run command.
+- The agent no longer re-runs the (expensive/destructive) Vector install +
+  restart every poll when a desired version fails to converge. A version target
+  that fails to install — or installs but doesn't change the reported version —
+  is remembered and not retried until the desired version changes, so a control
+  plane pinning an unattainable version can't drive an install/restart storm.
+- CI now scans the Go agent for known vulnerabilities (`govulncheck`, gating) and
+  runs `gosec` informationally — the security-critical root agent previously had
+  no static analysis.
 - The generated agent systemd unit is now sandboxed (`NoNewPrivileges`,
   `ProtectHome`, `PrivateTmp`, `ProtectKernel*`, `ProtectControlGroups`,
   `RestrictSUIDSGID`, `RestrictNamespaces`, `LockPersonality`) to shrink the root
