@@ -67,6 +67,12 @@ its first release.
   different long passwords could authenticate each other. Such passwords are now
   rejected (byte-counted, so multi-byte characters count correctly), and
   `get_password_hash` refuses over-length input as a backstop.
+- Login no longer leaks account existence through the account-lockout status
+  code. Previously a real local account returned `429 Account locked` after the
+  failed-attempt threshold while an unknown email kept returning `401`, so the
+  `429`-vs-`401` divergence enumerated accounts (defeating the timing equalizer).
+  The lockout is now enforced uniformly for known and unknown emails, so both
+  return the same `429` at the same threshold.
 - Login no longer leaks account existence through response timing. When there is
   no local password to verify (unknown email, an SSO/LDAP account, or an inactive
   account), the handler now performs one dummy bcrypt verify so the response time

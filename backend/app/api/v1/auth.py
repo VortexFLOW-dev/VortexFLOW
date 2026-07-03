@@ -114,6 +114,24 @@ async def login(
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
 
+    # Unified brute-force lockout key: per-account for a real user, else per-email.
+    # Checked here — identically for known and unknown emails, before any auth
+    # branch — so the 429-vs-401 response can't reveal whether the email has a
+    # (local) account. Runs before the timing equalizer so a locked response
+    # returns without a bcrypt cycle for both cases (symmetric).
+    lock_key = f"acct:{user.id}" if user is not None else f"email:{body.email}"
+    if await redis_client.get_login_failures(lock_key) >= settings.max_login_attempts:
+        await audit.record(
+            action="auth.login_locked",
+            user_id=user.id if user is not None else None,
+            user_email=body.email,
+            ip=ip,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account locked due to too many failed attempts",
+        )
+
     # Equalize timing: if the local-password branch below won't run a real
     # bcrypt verify (unknown email, SSO/LDAP account, no stored hash, or an
     # inactive account rejected early), burn one dummy verify now so response
@@ -136,7 +154,7 @@ async def login(
         )
 
     async def _issue(u: User) -> TokenResponse:
-        await redis_client.clear_login_failures(f"acct:{u.id}")
+        await redis_client.clear_login_failures(lock_key)
         # Note: intentionally NOT clearing ip:{ip} — IP counter is a
         # network-level signal independent of per-user success; clearing it lets
         # a shared-NAT attacker reset their record by sharing an IP with a
@@ -147,7 +165,7 @@ async def login(
 
     # A disabled account never authenticates, by any method.
     if user is not None and not user.is_active:
-        await _fail(f"acct:{user.id}")
+        await _fail(lock_key)
         await audit.record(
             action="auth.login_failed",
             user_id=user.id,
@@ -160,22 +178,10 @@ async def login(
         )
 
     # ── Local password auth ──────────────────────────────────────────────────
+    # (Lockout already enforced uniformly above via lock_key.)
     if user is not None and user.auth_method == "local" and user.hashed_password:
-        if await redis_client.get_login_failures(f"acct:{user.id}") >= (
-            settings.max_login_attempts
-        ):
-            await audit.record(
-                action="auth.login_locked",
-                user_id=user.id,
-                user_email=user.email,
-                ip=ip,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Account locked due to too many failed attempts",
-            )
         if not verify_password(body.password, user.hashed_password):
-            await _fail(f"acct:{user.id}")
+            await _fail(lock_key)
             await audit.record(
                 action="auth.login_failed",
                 user_id=user.id,
@@ -194,27 +200,13 @@ async def login(
     if user is None or user.auth_method == "ldap":
         ldap_cfg = await load_ldap_config(db)
         if ldap_cfg.enabled:
-            acct_key = f"acct:{user.id}" if user else f"email:{body.email}"
-            if await redis_client.get_login_failures(acct_key) >= (
-                settings.max_login_attempts
-            ):
-                if user is not None:
-                    await audit.record(
-                        action="auth.login_locked",
-                        user_id=user.id,
-                        user_email=user.email,
-                        ip=ip,
-                    )
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Account locked due to too many failed attempts",
-                )
+            # (Lockout already enforced uniformly above via lock_key.)
             try:
                 ldap_result = await ldap_authenticate(
                     body.email, body.password, ldap_cfg
                 )
             except LDAPAuthError:
-                await _fail(acct_key)
+                await _fail(lock_key)
                 await audit.record(
                     action="auth.login_failed",
                     user_email=body.email,
@@ -264,9 +256,7 @@ async def login(
             return await _issue(user)
 
     # ── Nothing matched: unknown email, SSO-only account, or LDAP disabled ────
-    # Stable non-enumerable key when there's no local account, so we don't leak
-    # whether the email exists.
-    await _fail(f"acct:{user.id}" if user is not None else f"email:{body.email}")
+    await _fail(lock_key)
     await audit.record(
         action="auth.login_failed",
         user_id=user.id if user is not None else None,
