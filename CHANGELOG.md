@@ -108,6 +108,12 @@ its first release.
   credential. Previously the placeholder collided with the "unchanged" sentinel,
   so on create it stored nothing (an empty LDAP bind / broken sink); updates
   still treat the placeholder as "keep the existing value" as before.
+- A CI test now guards the secret-detection definitions against client/server
+  drift. The backend `is_secret_key` (which encrypts + masks) and the frontend
+  `isSecretKey` (which drives password-input UX and preview masking) are
+  hand-mirrored regexes in two languages; the test fails the build the moment the
+  patterns, not-secret leaves, or suffixes diverge, so a credential-named field
+  can't silently end up masked on one side but not the other.
 - A credential-named component field with a non-string value (e.g. a numeric or
   boolean `password`/`api_key`) is now encrypted at rest like any other secret;
   previously only string secrets were extracted, so a non-string value fell
