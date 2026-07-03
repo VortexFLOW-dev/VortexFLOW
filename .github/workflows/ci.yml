@@ -124,6 +124,21 @@ jobs:
         run: pnpm lint
         continue-on-error: true
 
+  agent:
+    name: Agent · vet · build · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # The Go agent runs as root on fleet hosts, so its safety checks (e.g.
+      # confining server-supplied cert paths to the managed dir) must be tested.
+      # Build in the golang container — mirrors the Makefile `agent-build`
+      # fallback — so no separate toolchain pin is needed.
+      - name: Go vet · build · test (golang container)
+        run: |
+          docker run --rm -v "$PWD/agent":/src -w /src -e CGO_ENABLED=0 \
+            golang:1.26 sh -c 'go vet ./... && go build -o /tmp/agent . && go test ./...'
+
   secrets:
     name: Secret scan · gitleaks
     runs-on: ubuntu-latest

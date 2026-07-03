@@ -30,6 +30,12 @@ type Config struct {
 	VectorBin        string   // VECTOR_BIN (default "vector")
 	ReloadCmd        []string // VECTOR_RELOAD_CMD (default: systemctl kill -s HUP vector)
 	VectorInstallCmd []string // VECTOR_INSTALL_CMD ({version} placeholder); empty = no auto-update
+
+	// Managed directory the server is allowed to write cert material into.
+	// The agent runs as root, so server-supplied file paths are confined to
+	// this tree — a compromised control plane cannot write arbitrary host
+	// files. Must match the server's VORTEXFLOW_COMPONENT_CERTS_DIR.
+	CertsDir string // VORTEXFLOW_COMPONENT_CERTS_DIR (default /etc/vortexflow/component-certs)
 }
 
 // LoadConfig reads configuration from the environment, applying defaults and
@@ -43,6 +49,9 @@ func LoadConfig() (Config, error) {
 		CACertPath:   os.Getenv("AGENT_CA_CERT"),
 		ConfigPath:   envOr("VECTOR_CONFIG_PATH", "/etc/vector/vortexflow.yaml"),
 		VectorBin:    envOr("VECTOR_BIN", "vector"),
+		CertsDir: envOr(
+			"VORTEXFLOW_COMPONENT_CERTS_DIR", "/etc/vortexflow/component-certs",
+		),
 	}
 
 	var missing []string

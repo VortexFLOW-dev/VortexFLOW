@@ -42,6 +42,11 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- The root agent now confines every server-supplied cert-file write to the
+  managed component-certs directory (rejecting absolute paths outside it and
+  `..` traversal), so a compromised or malicious control plane can no longer
+  turn the deploy pull into an arbitrary root file write on a fleet host. Adds a
+  CI job that vets, builds, and tests the Go agent (previously untested in CI).
 - The fleet bootstrap token is now passed in an `X-Bootstrap-Token` request
   header instead of a URL query string, so it no longer lands in nginx / reverse
   proxy access logs.

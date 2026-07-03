@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -92,7 +93,7 @@ func (a *Agent) cycle(ctx context.Context) error {
 	// validate rejection (deterministic — caching the ETag avoids re-fetching a
 	// known-bad config), a write failure is usually transient (disk/permission),
 	// so DON'T cache the ETag: return an error to back off and retry next tick.
-	if err := writeConfigFiles(res.Files); err != nil {
+	if err := writeConfigFiles(res.Files, a.cfg.CertsDir); err != nil {
 		a.healthy = false
 		a.report(ctx, "reload_failed", err.Error())
 		return fmt.Errorf("write cert files (gen %d): %w", res.Generation, err)
@@ -176,30 +177,43 @@ func nextBackoff(cur time.Duration) time.Duration {
 
 // writeConfigFiles writes TLS cert material to the host before the config that
 // references it. Atomic write-then-rename; keys 0600, certs 0644; dirs 0700.
-func writeConfigFiles(files []ConfigFile) error {
+//
+// The agent runs as root and the paths come from the control plane, so every
+// write is confined to certsDir (the managed component-certs tree). A path
+// outside it — or one using ".." to escape it — is rejected, so a compromised
+// or malicious server cannot turn the deploy pull into an arbitrary root file
+// write (e.g. /root/.ssh/authorized_keys, /etc/cron.d/...).
+func writeConfigFiles(files []ConfigFile, certsDir string) error {
+	base := filepath.Clean(certsDir)
 	for _, f := range files {
 		if !filepath.IsAbs(f.Path) {
 			return fmt.Errorf("cert file path must be absolute: %s", f.Path)
 		}
-		if err := os.MkdirAll(filepath.Dir(f.Path), 0o700); err != nil {
+		clean := filepath.Clean(f.Path)
+		if clean != base && !strings.HasPrefix(clean, base+string(os.PathSeparator)) {
+			return fmt.Errorf(
+				"refusing to write %s: outside managed cert dir %s", f.Path, base,
+			)
+		}
+		if err := os.MkdirAll(filepath.Dir(clean), 0o700); err != nil {
 			return fmt.Errorf("mkdir for %s: %w", f.Path, err)
 		}
 		mode := os.FileMode(f.Mode)
 		if mode == 0 {
 			mode = 0o644
 		}
-		tmp := f.Path + ".tmp"
+		tmp := clean + ".tmp"
 		if err := os.WriteFile(tmp, []byte(f.Content), mode); err != nil {
-			return fmt.Errorf("write %s: %w", f.Path, err)
+			return fmt.Errorf("write %s: %w", clean, err)
 		}
 		// WriteFile applies umask; enforce the intended mode (0600 for keys).
 		if err := os.Chmod(tmp, mode); err != nil {
 			os.Remove(tmp)
-			return fmt.Errorf("chmod %s: %w", f.Path, err)
+			return fmt.Errorf("chmod %s: %w", clean, err)
 		}
-		if err := os.Rename(tmp, f.Path); err != nil {
+		if err := os.Rename(tmp, clean); err != nil {
 			os.Remove(tmp)
-			return fmt.Errorf("rename %s: %w", f.Path, err)
+			return fmt.Errorf("rename %s: %w", clean, err)
 		}
 	}
 	return nil
