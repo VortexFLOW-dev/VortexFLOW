@@ -218,6 +218,7 @@ async def install_script(
     safe_host = _safe_shell_value(host)
     safe_vm_url = _safe_shell_value(f"{host}/vm")
     safe_fleet_name = _safe_shell_value(fleet.name)
+    safe_metrics_token = _safe_shell_value(settings.metrics_write_token or "")
 
     # sha256 of the agent binaries this server will serve, per arch. Embedded in
     # the script so the download can be verified against a value the operator got
@@ -255,6 +256,7 @@ FLEET_ID={safe_fleet_id}
 BOOTSTRAP_TOKEN={safe_token}
 VORTEXFLOW_URL={safe_host}
 VM_URL={safe_vm_url}
+METRICS_WRITE_TOKEN={safe_metrics_token}
 VECTOR_CONFIG_DIR="/etc/vector"
 # Static metrics config (install-managed). The agent owns vortexflow.yaml in the
 # same dir — Vector loads the whole dir via --config-dir and merges them.
@@ -328,6 +330,14 @@ sinks:
     inputs: [internal_metrics]
     endpoint: "{vm_endpoint}"
 VECTOREOF
+# Present the metrics-write bearer token when the server requires one.
+if [ -n "${{METRICS_WRITE_TOKEN}}" ]; then
+  cat >> "${{METRICS_FILE}}" <<EOF
+    auth:
+      strategy: bearer
+      token: "${{METRICS_WRITE_TOKEN}}"
+EOF
+fi
 # Trust the leader's CA for the metrics remote-write when TLS is self-managed.
 if [ -n "${{CA_FILE}}" ]; then
   cat >> "${{METRICS_FILE}}" <<EOF

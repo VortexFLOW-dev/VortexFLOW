@@ -38,6 +38,15 @@ its first release.
 - **Restricted the public `/vm` proxy to the metrics write endpoint.** It
   previously reverse-proxied the entire VictoriaMetrics API to the front door,
   including read/export and the destructive `admin/tsdb/delete_series`.
+- **The `/vm` metrics-write path can now require a bearer token.** Set
+  `VORTEXFLOW_METRICS_WRITE_TOKEN` and nginx gates `/vm/api/v1/write` via an
+  `auth_request` to the backend, so an anonymous caller can no longer POST
+  crafted metrics to poison the health/alerting pipeline; the install script
+  bakes the token into each agent's Vector remote-write sink. Unset (default)
+  keeps the path open (backward compatible). Live-verified end-to-end: anonymous
+  and wrong-token writes are 401, the correct token reaches VM. (When enabled,
+  external agents' writes depend on the backend for the auth check; Vector
+  buffers/retries, and the leader's own metrics write to VM directly.)
 - **Server-side session lifecycle.** Logout now revokes the access token,
   invalidates the refresh token, and ends the session; sessions enforce an idle
   timeout and an absolute cap; refresh-token replay fails closed; and the client

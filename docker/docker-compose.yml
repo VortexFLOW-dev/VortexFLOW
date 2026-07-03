@@ -36,6 +36,10 @@ services:
       VORTEXFLOW_REDIS_URL: redis://redis:6379/0
       VORTEXFLOW_SECRET_KEY: ${VORTEXFLOW_SECRET_KEY:?secret key required}
       VORTEXFLOW_VM_URL: http://victoriametrics:8428
+      # Optional: require this bearer token on the public /vm metrics-write proxy
+      # (nginx auth_request → backend). Unset = open (historical). Agents get it
+      # baked into their metrics config by the install script.
+      VORTEXFLOW_METRICS_WRITE_TOKEN: ${METRICS_WRITE_TOKEN:-}
       # External URL agents reach this server at. Required behind the proxy —
       # used to generate the agent install one-liner + metrics endpoint.
       VORTEXFLOW_PUBLIC_URL: ${PUBLIC_URL:-}

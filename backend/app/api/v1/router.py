@@ -23,10 +23,12 @@ from app.api.v1 import (
     fleets,
     tokens,
     transform_stages,
+    vm,
 )
 
 api_router = APIRouter()
 
+api_router.include_router(vm.router, prefix="/vm", tags=["vm"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(auth_sso.router, prefix="/auth", tags=["auth-sso"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])

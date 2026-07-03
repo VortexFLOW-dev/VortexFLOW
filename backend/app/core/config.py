@@ -107,6 +107,13 @@ class Settings(BaseSettings):
     # security control there.
     demo_mode: bool = False
 
+    # Optional bearer token required to POST metrics to the public /vm write proxy.
+    # Unset (default) = the write path is open (historical behavior). When set,
+    # nginx gates /vm/api/v1/write via an auth_request to /api/v1/vm/authorize,
+    # and the agent presents this token (embedded in its Vector remote_write
+    # sink) — closing anonymous metric-poisoning of the alerting pipeline.
+    metrics_write_token: Optional[str] = None
+
     # Brute-force protection
     max_login_attempts: int = 5
     lockout_duration_seconds: int = 900
