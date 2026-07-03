@@ -149,18 +149,27 @@ async def install_script(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid bootstrap token"
         )
 
-    # Determine VortexFlow base URL — prefer explicit param, then settings, then request origin
-    if host:
-        host = _validate_host(host)
-    else:
-        from app.core.config import settings as app_settings
+    # Determine the VortexFlow base URL that gets baked into a ROOT-run install
+    # script. A configured public_url is authoritative and always wins — a
+    # request-supplied `host` param or `Host` header must NOT be able to point
+    # the script (and therefore the agent's CA/binary/config fetch) at an
+    # attacker's server. Only in debug (dev) do we fall back to a request-derived
+    # host for convenience.
+    from app.core.config import settings as app_settings
 
-        if hasattr(app_settings, "public_url") and app_settings.public_url:
-            inferred: str = app_settings.public_url.rstrip("/")
-        else:
-            # Fall back to request origin — note: X-Forwarded-Host is not trusted here
-            inferred = str(request.base_url).rstrip("/")
+    if app_settings.public_url:
+        host = _validate_host(app_settings.public_url.rstrip("/"))
+    elif app_settings.debug:
+        inferred = host or str(request.base_url).rstrip("/")
         host = _validate_host(inferred)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Server public_url is not configured. Set VORTEXFLOW_PUBLIC_URL "
+                "so the install script points agents at the correct address."
+            ),
+        )
 
     # Shell-safe values for embedding in the script
     safe_fleet_id = _safe_shell_value(fleet_id)

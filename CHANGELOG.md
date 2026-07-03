@@ -126,6 +126,14 @@ its first release.
   `..` traversal), so a compromised or malicious control plane can no longer
   turn the deploy pull into an arbitrary root file write on a fleet host. Adds a
   CI job that vets, builds, and tests the Go agent (previously untested in CI).
+- The install script's base URL is now taken authoritatively from the configured
+  `public_url` and can no longer be set by a request `Host` header or `?host=`
+  query override. Previously, when `public_url` was unset the URL fell back to the
+  request origin, so a bootstrap-token holder with a spoofed `Host` could bake an
+  attacker URL into the root-run install script (agent then fetched its CA,
+  binary, and config from the attacker). In production, the endpoint now refuses
+  (409) until `public_url` is configured; the request-derived fallback remains
+  only in debug/dev.
 - The fleet bootstrap token is now passed in an `X-Bootstrap-Token` request
   header instead of a URL query string, so it no longer lands in nginx / reverse
   proxy access logs.
