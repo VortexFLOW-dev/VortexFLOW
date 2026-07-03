@@ -506,7 +506,9 @@ async def validate_fleet_config(
     # Validate the *real* config (secrets revealed) so the verdict matches what
     # deploy will write. validate_config uses a private temp file, scrubbed.
     render = await _render_fleet(fleet_id, db, reveal_secrets=True)
-    result = config_render.validate_config(render.yaml)
+    result = config_render.validate_config(
+        render.yaml, redact=config_render.collect_secret_values(render.config)
+    )
     return {
         "status": result.status,
         "output": result.output,
@@ -547,7 +549,9 @@ async def deploy_fleet(
     # Pre-flight: run `vector validate` server-side. Block on a genuine schema
     # rejection; if Vector isn't available here, validation is skipped (the
     # agent still validates before reload in agent mode).
-    validation = config_render.validate_config(render.yaml)
+    validation = config_render.validate_config(
+        render.yaml, redact=config_render.collect_secret_values(render.config)
+    )
     if validation.status == "invalid":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

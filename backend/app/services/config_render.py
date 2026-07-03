@@ -487,14 +487,54 @@ class ValidateResult:
     output: str = ""
 
 
-def validate_config(content: str, *, timeout: float = 20.0) -> ValidateResult:
+def collect_secret_values(config: dict) -> set[str]:
+    """Plaintext secret values in a *revealed* render, for scrubbing from
+    ``vector validate`` output before it is shown to an editor.
+
+    Walks the rendered config tree and collects leaf values whose key names a
+    credential (per ``is_secret_key``). Only values of length ≥ 4 are collected,
+    so an incidental short token in the validator's message isn't over-redacted.
+    """
+    found: set[str] = set()
+
+    def walk(node: object, key: str) -> None:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, k)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, key)
+        elif (
+            key
+            and secrets_svc.is_secret_key(key)
+            and node
+            not in (
+                None,
+                "",
+                secrets_svc.MASK,
+            )
+        ):
+            s = str(node)
+            if len(s) >= 4:
+                found.add(s)
+
+    walk(config, "")
+    return found
+
+
+def validate_config(
+    content: str, *, redact: set[str] | None = None, timeout: float = 20.0
+) -> ValidateResult:
     """Run `vector validate` against rendered config text, server-side.
 
     Writes the config to a private temp file and shells out via an arg list (no
     shell, no user-controlled args beyond our own temp path). Vector is bundled
     in the backend image; where it's absent (dev boxes, TLS-terminated installs)
     this returns ``unavailable`` so callers can degrade gracefully instead of
-    blocking every deploy. The temp path is scrubbed from the returned output.
+    blocking every deploy. The temp path is scrubbed from the returned output;
+    when validating a revealed (secrets-inlined) config, pass ``redact`` (see
+    ``collect_secret_values``) so a validator error echoing a value can't leak
+    the plaintext secret back to the caller.
     """
     import shutil
     import subprocess
@@ -536,6 +576,10 @@ def validate_config(content: str, *, timeout: float = 20.0) -> ValidateResult:
         # Scrub the temp path so callers never see server filesystem internals.
         raw = ((proc.stdout or "") + (proc.stderr or "")).strip()
         cleaned = raw.replace(tmp_path, CONFIG_FILENAME).replace(tmp_dir, "")
+        # Scrub any inlined secret values a validator error may have echoed back.
+        for val in redact or ():
+            if val:
+                cleaned = cleaned.replace(val, "«redacted-secret»")
         if proc.returncode == 0:
             return ValidateResult(status="valid", output=cleaned)
         return ValidateResult(status="invalid", output=cleaned)

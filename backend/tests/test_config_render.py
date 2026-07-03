@@ -156,3 +156,59 @@ def test_config_inputs_key_cannot_clobber_wiring():
     )
     assert r.config["sinks"]["dst"]["inputs"] == ["src"]
     assert any("reserved config key 'inputs'" in w for w in r.warnings)
+
+
+def test_collect_secret_values_finds_revealed_secrets():
+    from app.services.config_render import collect_secret_values
+
+    cfg = {
+        "sinks": {
+            "s1": {
+                "type": "http",
+                "uri": "https://example.com",  # not secret
+                "auth": {"password": "hunter2secret"},  # nested secret
+                "token": "tok-abcdef123",  # secret
+            }
+        },
+        "sources": {"a": {"type": "socket", "address": "0.0.0.0:514"}},
+    }
+    vals = collect_secret_values(cfg)
+    assert "hunter2secret" in vals
+    assert "tok-abcdef123" in vals
+    assert "https://example.com" not in vals  # non-secret key preserved
+    assert "0.0.0.0:514" not in vals
+
+
+def test_collect_secret_values_skips_mask_and_short():
+    from app.services.config_render import collect_secret_values
+    from app.services.secrets import MASK
+
+    cfg = {"sinks": {"s": {"password": MASK, "token": "ab"}}}  # masked + too short
+    assert collect_secret_values(cfg) == set()
+
+
+def test_validate_redacts_secret_from_output(monkeypatch):
+    # Even if `vector validate` echoes a secret value, validate_config must scrub
+    # it before returning (svc F12). Fake the subprocess to emit the secret.
+    # validate_config imports shutil/subprocess locally, so patch the real
+    # modules (the function binds to the same module objects).
+    import shutil
+    import subprocess
+    from types import SimpleNamespace
+
+    from app.services.config_render import validate_config
+
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/vector")
+
+    def fake_run(*a, **k):
+        return SimpleNamespace(
+            returncode=1,
+            stdout="error: invalid value 'hunter2secret' at auth.password",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    res = validate_config("noop: true\n", redact={"hunter2secret"})
+    assert res.status == "invalid"
+    assert "hunter2secret" not in res.output
+    assert "«redacted-secret»" in res.output

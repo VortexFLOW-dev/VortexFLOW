@@ -42,6 +42,10 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- `vector validate` output shown to editors (the fleet validate endpoint and the
+  pre-deploy 409) is now scrubbed of any inlined secret values, so a validator
+  error that echoes a config value can't leak a decrypted credential back to the
+  browser.
 - A credential-named component field with a non-string value (e.g. a numeric or
   boolean `password`/`api_key`) is now encrypted at rest like any other secret;
   previously only string secrets were extracted, so a non-string value fell
