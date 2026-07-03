@@ -54,6 +54,10 @@ its first release.
   `public_url`) and the hardcoded `localhost` dev origins are emitted only when
   `debug` is set. A production build no longer ships credentialed CORS access for
   `localhost:5173` / `localhost:3000`.
+- The `useRequireAuth` hook now performs its unauthenticated redirect in an
+  effect and returns `User | null` instead of navigating during render and
+  returning a null-assertion — removing a latent null-dereference / auth-gate
+  race in that helper.
 - The component config "Generated YAML" preview and its "Copy YAML" action now
   mask secret fields (`password`, `token`, `api_key`, …) instead of rendering the
   typed value in plaintext, matching the backend's masked config preview.

@@ -78,10 +78,16 @@ export function useAuth(): AuthState {
   return ctx
 }
 
-export function useRequireAuth(): User {
+export function useRequireAuth(): User | null {
   const { user, loading } = useAuth()
-  if (!loading && !user) {
-    window.location.href = '/login'
-  }
-  return user!
+  // Redirect as a side-effect, never during render (a render-time navigation +
+  // returning `user!` on a null user would let a consumer dereference null and
+  // crash before the redirect lands). Callers must handle the null return by
+  // rendering nothing while the redirect is in flight.
+  useEffect(() => {
+    if (!loading && !user) {
+      window.location.href = '/login'
+    }
+  }, [loading, user])
+  return user
 }
