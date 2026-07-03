@@ -20,8 +20,9 @@ its first release.
   JWT secret can be rotated without re-encrypting stored secrets and a disclosure
   of one key doesn't compromise the other. It is fully backward compatible: when
   unset, at-rest encryption continues to derive from `SECRET_KEY` (no migration).
-  A fresh install can set it directly; adopting it on an existing install needs a
-  one-time re-encryption of stored secrets (planned).
+  A fresh install can set it directly; an existing install adopts it by setting
+  the key and running the one-time, dry-run-by-default, idempotent
+  `python -m app.reencrypt_secrets` migration (see docs/UPGRADING.md).
 - **Agents are served only the last successfully-deployed config.** The agent
   config endpoint now returns an encrypted snapshot of the config from the last
   successful deploy (written after `vector validate` passes), never a live DB

@@ -100,3 +100,31 @@ Vector itself runs on the Vector hosts (managed instances), not in this compose 
 installed/updated by the host's package manager (the install one-liner).
 **Roadmap:** leader-driven version management — the agent reconciles each host to a
 desired Vector version pushed from the control plane (see [ROADMAP.md](../ROADMAP.md)).
+
+## Separating the at-rest encryption key from the JWT signing key (optional)
+
+By default, `VORTEXFLOW_SECRET_KEY` both signs session JWTs and derives the key
+that encrypts secrets at rest (component/SSO/AI credentials, cert private keys,
+the deploy snapshot). To decouple them — so the JWT secret can be rotated without
+re-encrypting every stored secret, and a disclosure of one key doesn't compromise
+the other — set a dedicated `VORTEXFLOW_ENCRYPTION_KEY` (≥32 chars).
+
+- **Fresh install:** just set `VORTEXFLOW_ENCRYPTION_KEY`. Done.
+- **Existing install** (already has encrypted data under `SECRET_KEY`): set the
+  new key, then run the one-time re-encryption migration from the backend:
+
+  ```bash
+  # 1. dry run — reports what would change, writes nothing:
+  VORTEXFLOW_ENCRYPTION_KEY="<new key>" python -m app.reencrypt_secrets
+  # 2. apply:
+  VORTEXFLOW_ENCRYPTION_KEY="<new key>" python -m app.reencrypt_secrets --commit
+  ```
+
+  The migration is **idempotent** (safe to re-run) and **skips** any value that
+  can't be decrypted with the old key — e.g. an orphaned deploy snapshot from a
+  prior key, which the app already tolerates. If it reports that *everything* was
+  undecryptable, your `--old-key` (default: the current `SECRET_KEY`) is wrong;
+  nothing is written. Take a database backup before running with `--commit`.
+
+Leaving `VORTEXFLOW_ENCRYPTION_KEY` unset keeps the historical behavior (at-rest
+encryption derives from `SECRET_KEY`) with no migration needed.
