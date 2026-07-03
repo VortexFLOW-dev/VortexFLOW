@@ -111,7 +111,15 @@ def split_for_write(
         if v == MASK:
             if k in existing:
                 secrets[k] = existing[k]  # unchanged — preserve
-            # else: masked but nothing stored → treat as unset, drop
+            else:
+                # No stored secret to preserve → the MASK placeholder is not a
+                # meaningful value. Reject rather than silently storing nothing
+                # (which for e.g. an LDAP bind_password would be an empty-bind
+                # footgun). A real secret can never legitimately equal the
+                # sentinel, so this is safe to refuse.
+                raise ValueError(
+                    f"'{k}' cannot be set to the placeholder value; enter a real secret"
+                )
         elif _is_unset(v):
             public[k] = v  # empty/absent — nothing to hide, keep it public
         else:

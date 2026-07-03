@@ -233,7 +233,11 @@ def _seal_secrets(new: dict, stored: dict, *fields: str) -> dict:
             elif stored.get(f):  # legacy plaintext at rest → migrate to encrypted
                 out[enc_key] = cert_crypto.encrypt(stored[f], app_settings.secret_key)
             else:
-                out[enc_key] = ""
+                # MASK placeholder with nothing stored → not a real value; refuse
+                # rather than persisting an empty credential (empty-bind footgun).
+                raise ValueError(
+                    f"'{f}' cannot be set to the placeholder value; enter a real secret"
+                )
         else:
             out[enc_key] = cert_crypto.encrypt(incoming, app_settings.secret_key)
     return out
@@ -255,7 +259,10 @@ async def put_azure(
     _: User = Depends(require_admin),
 ) -> AzureSettings:
     stored = await _get_setting("sso_azure", db)
-    payload = _seal_secrets(body.model_dump(), stored, "client_secret")
+    try:
+        payload = _seal_secrets(body.model_dump(), stored, "client_secret")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     await _put_setting("sso_azure", payload, db)
     logger.info("Azure SSO settings updated")
     return AzureSettings(**_mask_secrets(payload, "client_secret"))
@@ -280,7 +287,10 @@ async def put_oidc(
     _: User = Depends(require_admin),
 ) -> OidcSettings:
     stored = await _get_setting("sso_oidc", db)
-    payload = _seal_secrets(body.model_dump(), stored, "client_secret")
+    try:
+        payload = _seal_secrets(body.model_dump(), stored, "client_secret")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     await _put_setting("sso_oidc", payload, db)
     logger.info("OIDC SSO settings updated")
     return OidcSettings(**_mask_secrets(payload, "client_secret"))
@@ -460,7 +470,10 @@ async def put_ldap(
     _: User = Depends(require_admin),
 ) -> LdapSettings:
     stored = await _get_setting("sso_ldap", db)
-    payload = _seal_secrets(body.model_dump(), stored, "bind_password")
+    try:
+        payload = _seal_secrets(body.model_dump(), stored, "bind_password")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     await _put_setting("sso_ldap", payload, db)
     logger.info("LDAP settings updated")
     return LdapSettings(**_mask_secrets(payload, "bind_password"))

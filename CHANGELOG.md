@@ -93,6 +93,11 @@ its first release.
   pre-deploy 409) is now scrubbed of any inlined secret values, so a validator
   error that echoes a config value can't leak a decrypted credential back to the
   browser.
+- Setting a secret to the literal mask placeholder (`••••••••`) when none is
+  stored is now rejected with a 422 instead of silently persisting an empty
+  credential. Previously the placeholder collided with the "unchanged" sentinel,
+  so on create it stored nothing (an empty LDAP bind / broken sink); updates
+  still treat the placeholder as "keep the existing value" as before.
 - A credential-named component field with a non-string value (e.g. a numeric or
   boolean `password`/`api_key`) is now encrypted at rest like any other secret;
   previously only string secrets were extracted, so a non-string value fell

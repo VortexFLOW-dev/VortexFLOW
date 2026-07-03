@@ -357,9 +357,14 @@ async def _migrate_component_secrets():
                     continue
                 if not any(secrets_svc.is_secret_key(k) for k in config):
                     continue  # nothing left to migrate
-                public, secrets_enc = secrets_svc.split_for_write(
-                    config, c.secrets_encrypted, _settings.secret_key
-                )
+                try:
+                    public, secrets_enc = secrets_svc.split_for_write(
+                        config, c.secrets_encrypted, _settings.secret_key
+                    )
+                except ValueError:
+                    # A stored MASK-placeholder value can't be split; skip this
+                    # component rather than aborting the whole migration.
+                    continue
                 c.config_json = _json.dumps(public)
                 if secrets_enc is not None:
                     c.secrets_encrypted = secrets_enc

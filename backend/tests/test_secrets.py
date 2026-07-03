@@ -98,11 +98,20 @@ def test_empty_string_secret_not_encrypted():
     assert public == {"password": ""}
 
 
-def test_mask_with_no_existing_is_dropped():
-    # Masked sentinel but nothing stored → treated as unset.
-    public, enc = s.split_for_write({"token": s.MASK}, None, KEY)
-    assert enc is None
-    assert "token" not in public
+def test_mask_with_no_existing_is_rejected():
+    # A create-time MASK placeholder has nothing to preserve — reject it rather
+    # than silently storing an empty credential (svc M5, empty-bind footgun).
+    import pytest
+
+    with pytest.raises(ValueError):
+        s.split_for_write({"token": s.MASK}, None, KEY)
+
+
+def test_mask_on_update_still_preserves():
+    # MASK with a stored value keeps the existing secret (unchanged behavior).
+    _, enc = s.split_for_write({"token": "real"}, None, KEY)
+    new_public, new_enc = s.split_for_write({"token": s.MASK}, enc, KEY)
+    assert s.merge_revealed(new_public, new_enc, KEY)["token"] == "real"
 
 
 def test_numeric_secret_value_is_encrypted_not_plaintext():

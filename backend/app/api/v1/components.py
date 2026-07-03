@@ -109,9 +109,12 @@ async def create_component(
     if sink_inputs:
         await _validate_inputs(body.fleet_id, sink_inputs, db)
 
-    public, secrets_enc = secrets_svc.split_for_write(
-        body.config, None, settings.secret_key
-    )
+    try:
+        public, secrets_enc = secrets_svc.split_for_write(
+            body.config, None, settings.secret_key
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     component = Component(
         fleet_id=body.fleet_id,
         kind=body.kind,
@@ -152,9 +155,12 @@ async def update_component(
     if body.config is not None:
         # Re-split: secret fields sent back as the MASK sentinel keep their
         # stored ciphertext; only changed/new secrets are re-encrypted.
-        public, secrets_enc = secrets_svc.split_for_write(
-            body.config, component.secrets_encrypted, settings.secret_key
-        )
+        try:
+            public, secrets_enc = secrets_svc.split_for_write(
+                body.config, component.secrets_encrypted, settings.secret_key
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
         component.config_json = json.dumps(public)
         component.secrets_encrypted = secrets_enc
     if body.inputs is not None and component.kind == "sink":
