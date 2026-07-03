@@ -36,6 +36,12 @@ from app.services.sso_jit import SsoConflict, jit_upsert
 
 router = APIRouter()
 
+# A throwaway bcrypt hash verified against when a login has no real local
+# password to check (unknown email, SSO/LDAP account, inactive account). Burning
+# one bcrypt cycle equalizes response timing so an attacker can't enumerate
+# which emails have a local account by how fast the request is rejected.
+_DUMMY_PASSWORD_HASH = get_password_hash("vortexflow-login-timing-equalizer")
+
 
 def _get_client_ip(request: Request) -> str:
     return client_ip(request)
@@ -111,6 +117,19 @@ async def login(
 
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
+
+    # Equalize timing: if the local-password branch below won't run a real
+    # bcrypt verify (unknown email, SSO/LDAP account, no stored hash, or an
+    # inactive account rejected early), burn one dummy verify now so response
+    # time doesn't reveal whether the email has a local account (F6).
+    will_verify_local = (
+        user is not None
+        and user.is_active
+        and user.auth_method == "local"
+        and bool(user.hashed_password)
+    )
+    if not will_verify_local:
+        verify_password(body.password, _DUMMY_PASSWORD_HASH)
 
     async def _fail(acct_key: str) -> None:
         await redis_client.record_login_failure(

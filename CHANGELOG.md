@@ -42,6 +42,10 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- Login no longer leaks account existence through response timing. When there is
+  no local password to verify (unknown email, an SSO/LDAP account, or an inactive
+  account), the handler now performs one dummy bcrypt verify so the response time
+  matches a real local-password check.
 - The notification "send test" action no longer echoes raw connection errors.
   A raw SMTP/socket failure carries the target host and the refused/timeout/DNS
   distinction, which turned this admin action into an internal port-scan oracle;
