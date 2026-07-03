@@ -54,6 +54,9 @@ its first release.
   `public_url`) and the hardcoded `localhost` dev origins are emitted only when
   `debug` is set. A production build no longer ships credentialed CORS access for
   `localhost:5173` / `localhost:3000`.
+- The component config "Generated YAML" preview and its "Copy YAML" action now
+  mask secret fields (`password`, `token`, `api_key`, …) instead of rendering the
+  typed value in plaintext, matching the backend's masked config preview.
 - Creating a personal access token now enforces the forced-password-change gate.
   A PAT inherits its owner's role, so a user required to rotate their password
   could previously mint one and use it to bypass the gate; token creation now

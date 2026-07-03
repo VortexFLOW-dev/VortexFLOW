@@ -1441,7 +1441,10 @@ export function generateYaml(
     if (coerced === field.default) continue
     if (Array.isArray(coerced) && coerced.length === 0) continue
 
-    flat[field.key] = coerced
+    // Never surface a secret value in the preview / "Copy YAML" output — mask it
+    // like the backend does in its config preview. The real value is sent to the
+    // server only on save and is decrypted just-in-time at deploy.
+    flat[field.key] = isSecretKey(field.key) ? '••••••••' : coerced
   }
 
   // Build YAML — expand dot-notation keys into nested blocks
