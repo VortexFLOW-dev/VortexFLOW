@@ -54,6 +54,11 @@ its first release.
   `public_url`) and the hardcoded `localhost` dev origins are emitted only when
   `debug` is set. A production build no longer ships credentialed CORS access for
   `localhost:5173` / `localhost:3000`.
+- The API 401-refresh interceptor no longer fires on auth endpoints, so a wrong
+  password on the login form surfaces the real error instead of being swallowed
+  into a refresh attempt and a page reload; it also skips the refresh flow when
+  no refresh token exists. And a failed token refresh now rejects every queued
+  request instead of leaving them hanging in a permanent loading state.
 - The `useRequireAuth` hook now performs its unauthenticated redirect in an
   effect and returns `User | null` instead of navigating during render and
   returning a null-assertion — removing a latent null-dereference / auth-gate

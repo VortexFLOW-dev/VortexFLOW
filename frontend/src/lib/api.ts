@@ -29,22 +29,42 @@ api.interceptors.request.use((config) => {
 
 // Auto-refresh on 401
 let _refreshing = false
-let _refreshQueue: Array<(token: string) => void> = []
+type QueueEntry = {
+  resolve: (token: string) => void
+  reject: (reason: unknown) => void
+}
+let _refreshQueue: QueueEntry[] = []
+
+// Auth endpoints must never trigger the refresh flow: a 401 from /auth/login is
+// a real "wrong credentials" error the login form must surface (not a page
+// reload that wipes it), and a 401 from refresh/logout is terminal.
+const _AUTH_PATHS = ['/auth/login', '/auth/refresh', '/auth/logout']
+const _isAuthPath = (url?: string) => !!url && _AUTH_PATHS.some((p) => url.includes(p))
 
 api.interceptors.response.use(
   (res) => res,
   async (err: AxiosError) => {
     const original = err.config as typeof err.config & { _retry?: boolean }
-    if (err.response?.status !== 401 || original?._retry) {
+    // Don't attempt refresh for: non-401s, already-retried requests, auth
+    // endpoints, or when there's no refresh token to use in the first place.
+    if (
+      err.response?.status !== 401 ||
+      original?._retry ||
+      _isAuthPath(original?.url) ||
+      !localStorage.getItem('refresh_token')
+    ) {
       return Promise.reject(err)
     }
     original._retry = true
 
     if (_refreshing) {
-      return new Promise((resolve) => {
-        _refreshQueue.push((token) => {
-          if (original?.headers) original.headers.Authorization = `Bearer ${token}`
-          resolve(api(original!))
+      return new Promise((resolve, reject) => {
+        _refreshQueue.push({
+          resolve: (token) => {
+            if (original?.headers) original.headers.Authorization = `Bearer ${token}`
+            resolve(api(original!))
+          },
+          reject,
         })
       })
     }
@@ -61,12 +81,16 @@ api.interceptors.response.use(
       localStorage.setItem('access_token', data.access_token)
       localStorage.setItem('refresh_token', data.refresh_token)
 
-      _refreshQueue.forEach((cb) => cb(data.access_token))
+      _refreshQueue.forEach((e) => e.resolve(data.access_token))
       _refreshQueue = []
 
       if (original?.headers) original.headers.Authorization = `Bearer ${data.access_token}`
       return api(original!)
-    } catch {
+    } catch (refreshErr) {
+      // Reject every queued request — otherwise they hang forever waiting on a
+      // refresh that will never complete.
+      _refreshQueue.forEach((e) => e.reject(refreshErr))
+      _refreshQueue = []
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       window.location.href = '/login'
