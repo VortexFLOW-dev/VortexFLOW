@@ -46,6 +46,12 @@ its first release.
 - SMTP STARTTLS now verifies the mail server's certificate.
 - The install script verifies the downloaded agent binary against a per-arch
   sha256 embedded from the operator's authenticated session.
+- The self-signed-CA bootstrap can now be pinned. An operator reads the CA's
+  sha256 over their trusted admin session (`GET /install/ca-fingerprint`) and
+  passes it as `X-CA-Fingerprint` in the install one-liner; the script then
+  verifies the CA it fetches over trust-on-first-use against that out-of-band
+  value and aborts on mismatch, closing the first-contact MITM window. Omitting
+  the header keeps the existing TOFU behavior.
 - A component's user-supplied `config` can no longer override the reserved
   `type` or `inputs` keys the renderer computes. A `config.type` would otherwise
   defeat the create-time component-type allowlist (a source could deploy as any

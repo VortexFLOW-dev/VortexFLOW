@@ -76,6 +76,34 @@ async def download_ca() -> FileResponse:
     )
 
 
+def _ca_fingerprint() -> str | None:
+    """sha256 of the managed CA cert (PEM bytes), or None if no managed CA."""
+    if not settings.tls_cert_dir:
+        return None
+    path = os.path.join(settings.tls_cert_dir, "ca.pem")
+    if not os.path.isfile(path):
+        return None
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+@router.get("/ca-fingerprint")
+async def ca_fingerprint() -> dict:
+    """sha256 of the managed CA. An operator reads this over their already-trusted
+    admin session and passes it as ``X-CA-Fingerprint`` in the install one-liner,
+    so a new host's first CA fetch (over trust-on-first-use) is verified against a
+    value obtained out-of-band — closing the first-contact MITM window."""
+    fp = _ca_fingerprint()
+    if fp is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No managed CA"
+        )
+    return {"fingerprint": fp}
+
+
+_CA_FP_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
 def _safe_shell_value(value: str) -> str:
     """Return value wrapped in single quotes, escaping any embedded single quotes."""
     return "'" + value.replace("'", "'\\''") + "'"
@@ -116,6 +144,11 @@ async def install_script(
     # Token in a header, not the URL query — a query string lands in nginx/proxy
     # access logs and any intermediary; a request header does not.
     x_bootstrap_token: str = Header(..., alias="X-Bootstrap-Token"),
+    # Optional: the expected sha256 of the managed CA, obtained by the operator
+    # over their trusted admin session (GET /install/ca-fingerprint). When set,
+    # the script verifies the CA it fetches over trust-on-first-use against it and
+    # aborts on mismatch — closing the first-contact MITM window.
+    x_ca_fingerprint: str | None = Header(None, alias="X-CA-Fingerprint"),
     host: str | None = Query(
         None, description="VortexFlow base URL (auto-detected from request if omitted)"
     ),
@@ -170,6 +203,14 @@ async def install_script(
                 "so the install script points agents at the correct address."
             ),
         )
+
+    # Optional operator-supplied expected CA fingerprint (hex sha256).
+    if x_ca_fingerprint is not None and not _CA_FP_RE.match(x_ca_fingerprint):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-CA-Fingerprint must be a hex sha256 (64 hex chars)",
+        )
+    expected_ca_fp = (x_ca_fingerprint or "").lower()
 
     # Shell-safe values for embedding in the script
     safe_fleet_id = _safe_shell_value(fleet_id)
@@ -243,10 +284,25 @@ fi
 # ── Trust the leader's CA (self-signed TLS) ───────────────────────────────────
 # Fetch the CA over -k (trust-on-first-use), then verify everything else with it.
 # A 404 means TLS isn't self-managed here (plain HTTP or a real cert) — carry on.
+# EXPECTED_CA_FP (set only when the operator passed X-CA-Fingerprint, obtained
+# over their trusted admin session) pins the fetched CA — aborting a first-contact
+# MITM that would otherwise substitute its own CA on the -k fetch.
+EXPECTED_CA_FP="{expected_ca_fp}"
 mkdir -p /etc/vortexflow
 CA_FILE=""
 CURL_CA=""
 if curl -fsSLk "${{VORTEXFLOW_URL}}/install/ca.crt" -o /etc/vortexflow/ca.crt 2>/dev/null && [ -s /etc/vortexflow/ca.crt ]; then
+  if [ -n "${{EXPECTED_CA_FP}}" ]; then
+    GOT_CA_FP=$(sha256sum /etc/vortexflow/ca.crt | cut -d' ' -f1)
+    if [ "${{GOT_CA_FP}}" != "${{EXPECTED_CA_FP}}" ]; then
+      echo "✗ CA fingerprint mismatch — refusing to trust a possibly-forged CA." >&2
+      echo "  expected ${{EXPECTED_CA_FP}}" >&2
+      echo "  got      ${{GOT_CA_FP}}" >&2
+      rm -f /etc/vortexflow/ca.crt
+      exit 1
+    fi
+    echo "→ CA fingerprint verified."
+  fi
   CA_FILE=/etc/vortexflow/ca.crt
   CURL_CA="--cacert ${{CA_FILE}}"
   echo "→ Installed VortexFlow CA for TLS verification."
