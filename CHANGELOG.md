@@ -26,9 +26,12 @@ its first release.
   timeout and an absolute cap; refresh-token replay fails closed; and the client
   IP is read via a trusted-proxy count so `X-Forwarded-For` can no longer be
   spoofed to defeat brute-force / IP-block counters.
-- **SSO IdP secrets are no longer sent to the browser.** `client_secret` /
-  `bind_password` are masked on read and preserved on write (mirrors the AI-key
-  handling).
+- **SSO IdP secrets are encrypted at rest and never sent to the browser.** The
+  OIDC/Azure `client_secret` and the LDAP `bind_password` are Fernet-encrypted
+  in `system_settings` (were stored plaintext), masked on read, and preserved on
+  write (mirrors the AI-key handling). A legacy plaintext value is migrated to
+  ciphertext on the next save; a secret that won't decrypt after a key rotation
+  fails closed.
 - The one-time setup/recovery token is armed only on a fresh install or explicit
   opt-in, instead of being printed to the logs on every boot.
 - SMTP STARTTLS now verifies the mail server's certificate.

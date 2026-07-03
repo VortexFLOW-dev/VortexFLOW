@@ -200,22 +200,42 @@ async def get_all_settings(
 
 
 def _mask_secrets(data: dict, *fields: str) -> dict:
-    """Replace stored secret values with the MASK sentinel so they never reach
-    the browser. An empty/absent secret stays empty (nothing to hide)."""
+    """Read transform: present a masked placeholder for any stored secret and
+    never emit the secret itself. A secret is considered stored if the Fernet
+    ciphertext (``<field>_encrypted``) is present, or — for installs that
+    predate at-rest encryption — a legacy plaintext ``<field>`` value. The
+    ciphertext key is stripped from the output either way."""
     out = dict(data)
     for f in fields:
-        if out.get(f):
-            out[f] = MASK
+        has = bool(out.get(f"{f}_encrypted") or out.get(f))
+        out[f] = MASK if has else ""
+        out.pop(f"{f}_encrypted", None)
     return out
 
 
-def _preserve_secrets(new: dict, stored: dict, *fields: str) -> dict:
-    """On write, keep the stored secret when the client sends back the MASK
-    sentinel (or nothing); only a real, new value replaces it."""
+def _seal_secrets(new: dict, stored: dict, *fields: str) -> dict:
+    """Persistence transform for secret fields — encrypt at rest with Fernet.
+
+    For each secret field the plaintext is dropped and only a
+    ``<field>_encrypted`` ciphertext is written:
+      - MASK / empty input  → keep the stored secret. If it is still a legacy
+        plaintext value (pre-encryption install), it is migrated to encrypted
+        form on this write.
+      - a real new value     → encrypt it.
+    """
     out = dict(new)
     for f in fields:
-        if out.get(f) in (MASK, "", None):
-            out[f] = stored.get(f, "")
+        enc_key = f"{f}_encrypted"
+        incoming = out.pop(f, "")
+        if incoming in (MASK, "", None):
+            if stored.get(enc_key):
+                out[enc_key] = stored[enc_key]
+            elif stored.get(f):  # legacy plaintext at rest → migrate to encrypted
+                out[enc_key] = cert_crypto.encrypt(stored[f], app_settings.secret_key)
+            else:
+                out[enc_key] = ""
+        else:
+            out[enc_key] = cert_crypto.encrypt(incoming, app_settings.secret_key)
     return out
 
 
@@ -235,7 +255,7 @@ async def put_azure(
     _: User = Depends(require_admin),
 ) -> AzureSettings:
     stored = await _get_setting("sso_azure", db)
-    payload = _preserve_secrets(body.model_dump(), stored, "client_secret")
+    payload = _seal_secrets(body.model_dump(), stored, "client_secret")
     await _put_setting("sso_azure", payload, db)
     logger.info("Azure SSO settings updated")
     return AzureSettings(**_mask_secrets(payload, "client_secret"))
@@ -260,7 +280,7 @@ async def put_oidc(
     _: User = Depends(require_admin),
 ) -> OidcSettings:
     stored = await _get_setting("sso_oidc", db)
-    payload = _preserve_secrets(body.model_dump(), stored, "client_secret")
+    payload = _seal_secrets(body.model_dump(), stored, "client_secret")
     await _put_setting("sso_oidc", payload, db)
     logger.info("OIDC SSO settings updated")
     return OidcSettings(**_mask_secrets(payload, "client_secret"))
@@ -440,7 +460,7 @@ async def put_ldap(
     _: User = Depends(require_admin),
 ) -> LdapSettings:
     stored = await _get_setting("sso_ldap", db)
-    payload = _preserve_secrets(body.model_dump(), stored, "bind_password")
+    payload = _seal_secrets(body.model_dump(), stored, "bind_password")
     await _put_setting("sso_ldap", payload, db)
     logger.info("LDAP settings updated")
     return LdapSettings(**_mask_secrets(payload, "bind_password"))

@@ -27,6 +27,28 @@ from app.core.config import (
     settings,
 )
 from app.models.system_setting import SystemSetting
+from app.services import cert_crypto
+
+
+def _secret(data: dict, field: str, env_fallback: str | None) -> str:
+    """Resolve an SSO secret from DB settings, then env.
+
+    The Settings API stores the secret Fernet-encrypted under
+    ``<field>_encrypted``; installs that predate at-rest encryption may still
+    hold a legacy plaintext ``<field>`` value. Prefer the ciphertext, fall back
+    to legacy plaintext, then the env var. A ciphertext that won't decrypt (the
+    ``VORTEXFLOW_SECRET_KEY`` was rotated) resolves to empty so auth fails closed
+    rather than binding with a wrong secret."""
+    enc = data.get(f"{field}_encrypted")
+    if enc:
+        try:
+            return cert_crypto.decrypt(enc, settings.secret_key)
+        except Exception:
+            return ""
+    legacy = data.get(field)
+    if legacy:
+        return str(legacy)
+    return env_fallback or ""
 
 
 async def _load_json(key: str, db: AsyncSession) -> dict:
@@ -89,9 +111,7 @@ async def load_ldap_config(db: AsyncSession) -> LDAPConfig:
         use_ssl=use_ssl,
         starttls=bool(data.get("starttls", False)),
         bind_dn=str(data.get("bind_dn") or settings.ldap_bind_dn or ""),
-        bind_password=str(
-            data.get("bind_password") or settings.ldap_bind_password or ""
-        ),
+        bind_password=_secret(data, "bind_password", settings.ldap_bind_password),
         base_dn=str(data.get("base_dn") or settings.ldap_base_dn or ""),
         user_filter=str(data.get("user_filter") or settings.ldap_user_filter),
         email_attr=str(data.get("email_attr") or "mail"),
@@ -168,7 +188,7 @@ async def load_azure_config(db: AsyncSession) -> OIDCConfig:
 
     tenant_id = str(data.get("tenant_id") or settings.azure_tenant_id or "")
     client_id = str(data.get("client_id") or settings.azure_client_id or "")
-    client_secret = str(data.get("client_secret") or settings.azure_client_secret or "")
+    client_secret = _secret(data, "client_secret", settings.azure_client_secret)
     issuer = f"https://login.microsoftonline.com/{tenant_id}/v2.0" if tenant_id else ""
     enabled = bool(data.get("enabled", False)) or bool(tenant_id and client_id)
 
@@ -194,7 +214,7 @@ async def load_oidc_config(db: AsyncSession) -> OIDCConfig:
 
     issuer = str(data.get("issuer") or settings.oidc_issuer or "")
     client_id = str(data.get("client_id") or settings.oidc_client_id or "")
-    client_secret = str(data.get("client_secret") or settings.oidc_client_secret or "")
+    client_secret = _secret(data, "client_secret", settings.oidc_client_secret)
 
     scopes_raw = data.get("scopes")
     if isinstance(scopes_raw, list) and scopes_raw:
