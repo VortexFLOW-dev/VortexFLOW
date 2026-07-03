@@ -117,3 +117,42 @@ def test_no_collision_non_listeners():
         [],
     )
     assert not r.errors
+
+
+def _sink(
+    id_: str, name: str, ctype: str, cfg: dict, inputs: list[str]
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=id_,
+        name=name,
+        kind="sink",
+        component_type=ctype,
+        config_json=json.dumps(cfg),
+        inputs_json=json.dumps(inputs),
+    )
+
+
+def test_config_type_key_cannot_clobber_allowlisted_type():
+    # A source whose user config carries a `type` must NOT override the
+    # allowlisted component_type (would defeat the create-time type allowlist).
+    r = render_fleet_config(
+        [_source("a", "src", "socket", {"type": "exec", "command": "id"})],
+        [],
+    )
+    assert r.config["sources"]["src"]["type"] == "socket"
+    assert "exec" not in json.dumps(r.config["sources"]["src"])
+    assert any("reserved config key 'type'" in w for w in r.warnings)
+
+
+def test_config_inputs_key_cannot_clobber_wiring():
+    # A sink whose user config carries `inputs` must NOT override the wiring the
+    # graph computed from inputs_json.
+    r = render_fleet_config(
+        [
+            _source("a", "src", "socket", {"address": "0.0.0.0:514", "mode": "tcp"}),
+            _sink("b", "dst", "console", {"inputs": ["evil"]}, inputs=["a"]),
+        ],
+        [],
+    )
+    assert r.config["sinks"]["dst"]["inputs"] == ["src"]
+    assert any("reserved config key 'inputs'" in w for w in r.warnings)

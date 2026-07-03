@@ -156,6 +156,25 @@ def _expand_dot_keys(flat: dict) -> dict:
     return out
 
 
+# Keys the renderer owns on every component block: ``type`` is the create-time
+# allowlisted component type, ``inputs`` is the wiring the graph computes. A
+# user-supplied ``config`` must never override them — letting ``config.type``
+# through would defeat the type allowlist (a source could deploy as any sink
+# type), and ``config.inputs`` would silently re-route the pipeline.
+_RESERVED_BLOCK_KEYS = ("type", "inputs")
+
+
+def _strip_reserved_keys(cfg: dict, label: str, warnings: list[str]) -> dict:
+    for key in _RESERVED_BLOCK_KEYS:
+        if key in cfg:
+            cfg.pop(key)
+            warnings.append(
+                f"{label}: ignored reserved config key '{key}' "
+                "(managed by the pipeline, not overridable)"
+            )
+    return cfg
+
+
 def _load_config_json(raw: str) -> dict:
     try:
         data = json.loads(raw or "{}")
@@ -310,8 +329,14 @@ def render_fleet_config(
     for c in sources:
         block: dict = {"type": c.component_type}
         block.update(
-            _expand_dot_keys(
-                _component_config(c, reveal_secrets, cert_materials, files, warnings)
+            _strip_reserved_keys(
+                _expand_dot_keys(
+                    _component_config(
+                        c, reveal_secrets, cert_materials, files, warnings
+                    )
+                ),
+                f"{c.kind} '{c.name}'",
+                warnings,
             )
         )
         config["sources"][name_map[c.id]] = block
@@ -397,8 +422,14 @@ def render_fleet_config(
         if ins:
             block["inputs"] = ins
         block.update(
-            _expand_dot_keys(
-                _component_config(c, reveal_secrets, cert_materials, files, warnings)
+            _strip_reserved_keys(
+                _expand_dot_keys(
+                    _component_config(
+                        c, reveal_secrets, cert_materials, files, warnings
+                    )
+                ),
+                f"{c.kind} '{c.name}'",
+                warnings,
             )
         )
         config["sinks"][name_map[c.id]] = block

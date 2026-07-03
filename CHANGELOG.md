@@ -34,6 +34,11 @@ its first release.
 - SMTP STARTTLS now verifies the mail server's certificate.
 - The install script verifies the downloaded agent binary against a per-arch
   sha256 embedded from the operator's authenticated session.
+- A component's user-supplied `config` can no longer override the reserved
+  `type` or `inputs` keys the renderer computes. A `config.type` would otherwise
+  defeat the create-time component-type allowlist (a source could deploy as any
+  sink type) and `config.inputs` could silently re-route a sink; both are now
+  dropped with a render warning.
 - The fleet bootstrap token is now passed in an `X-Bootstrap-Token` request
   header instead of a URL query string, so it no longer lands in nginx / reverse
   proxy access logs.
