@@ -263,9 +263,17 @@ async def register_agent(
     agent_token = secrets.token_urlsafe(32)
     token_hash = get_password_hash(agent_token)
 
-    # Upsert: look up by api_url scoped to this fleet only.
-    # If the api_url exists under a *different* fleet, reject — prevents cross-fleet hijacking.
-    result = await db.execute(select(Instance).where(Instance.api_url == body.api_url))
+    # Upsert scoped to THIS fleet only. The lookup is deliberately constrained to
+    # fleet_id: a previous version queried api_url across all fleets and 409'd on
+    # a cross-fleet match, which let a bootstrap-token holder enumerate which
+    # api_urls exist in other fleets (201-vs-409 oracle). A caller only ever sees
+    # its own fleet's instances now; the (self-declared) api_url isn't an auth
+    # boundary anyway — the per-agent token is.
+    result = await db.execute(
+        select(Instance).where(
+            Instance.api_url == body.api_url, Instance.fleet_id == fleet_id
+        )
+    )
     instance = result.scalar_one_or_none()
 
     if instance is None:
@@ -278,17 +286,11 @@ async def register_agent(
             agent_token_hash=token_hash,
         )
         db.add(instance)
-    elif instance.fleet_id == fleet_id:
+    else:
         # Re-registration of same instance in same fleet — idempotent update
         instance.role = "agent"
         instance.agent_token_hash = token_hash
         db.add(instance)
-    else:
-        # api_url is already registered to a different fleet — reject
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="This agent is already registered to a different fleet",
-        )
 
     await db.commit()
     await db.refresh(instance)

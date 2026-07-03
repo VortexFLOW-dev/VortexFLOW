@@ -138,6 +138,11 @@ its first release.
   header instead of a URL query string, so it no longer lands in nginx / reverse
   proxy access logs.
 - The backend container runs as a non-root user.
+- Agent registration no longer reveals whether an `api_url` is registered in
+  another fleet. The upsert lookup is now scoped to the target fleet (it
+  previously queried across all fleets and returned a `409` on a cross-fleet
+  match, letting a bootstrap-token holder enumerate other fleets' agent
+  addresses); a caller only ever sees its own fleet's instances.
 - Agent-registration rate limiting keys on the real client IP (was the proxy's,
   i.e. one shared bucket for all agents).
 - The rendered Vector config is now written `0600` (was `0644`) — on the deploy
