@@ -179,12 +179,14 @@ def test_collect_secret_values_finds_revealed_secrets():
     assert "0.0.0.0:514" not in vals
 
 
-def test_collect_secret_values_skips_mask_and_short():
+def test_collect_secret_values_skips_mask_but_keeps_short():
     from app.services.config_render import collect_secret_values
     from app.services.secrets import MASK
 
-    cfg = {"sinks": {"s": {"password": MASK, "token": "ab"}}}  # masked + too short
-    assert collect_secret_values(cfg) == set()
+    # MASK/empty are excluded, but a SHORT real secret must still be collected
+    # (no length floor) so it gets redacted from validator output.
+    cfg = {"sinks": {"s": {"password": MASK, "token": "ab", "api_key": ""}}}
+    assert collect_secret_values(cfg) == {"ab"}
 
 
 def test_validate_redacts_secret_from_output(monkeypatch):

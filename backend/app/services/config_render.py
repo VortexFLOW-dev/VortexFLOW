@@ -491,9 +491,10 @@ def collect_secret_values(config: dict) -> set[str]:
     """Plaintext secret values in a *revealed* render, for scrubbing from
     ``vector validate`` output before it is shown to an editor.
 
-    Walks the rendered config tree and collects leaf values whose key names a
-    credential (per ``is_secret_key``). Only values of length ≥ 4 are collected,
-    so an incidental short token in the validator's message isn't over-redacted.
+    Walks the rendered config tree and collects EVERY non-empty leaf value whose
+    key names a credential (per ``is_secret_key``). No length floor: a short real
+    secret (a 3-char token, a numeric PIN) must still be redacted from validator
+    output — better to over-redact an incidental match than leak a credential.
     """
     found: set[str] = set()
 
@@ -514,9 +515,7 @@ def collect_secret_values(config: dict) -> set[str]:
                 secrets_svc.MASK,
             )
         ):
-            s = str(node)
-            if len(s) >= 4:
-                found.add(s)
+            found.add(str(node))
 
     walk(config, "")
     return found

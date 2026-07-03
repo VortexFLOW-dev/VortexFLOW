@@ -102,7 +102,9 @@ its first release.
 - `vector validate` output shown to editors (the fleet validate endpoint and the
   pre-deploy 409) is now scrubbed of any inlined secret values, so a validator
   error that echoes a config value can't leak a decrypted credential back to the
-  browser.
+  browser. Redaction no longer skips short secret values (a 3-char token / numeric
+  PIN is now redacted too) — over-redacting an incidental match beats leaking a
+  credential.
 - Setting a secret to the literal mask placeholder (`••••••••`) when none is
   stored is now rejected with a 422 instead of silently persisting an empty
   credential. Previously the placeholder collided with the "unchanged" sentinel,
