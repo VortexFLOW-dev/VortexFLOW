@@ -91,6 +91,14 @@ its first release.
   boolean `password`/`api_key`) is now encrypted at rest like any other secret;
   previously only string secrets were extracted, so a non-string value fell
   through to plaintext `config_json` and showed in config previews / API reads.
+- The root agent's cert-write path confinement is now symlink- and TOCTOU-safe:
+  it resolves the real parent directory (rejecting a symlink planted inside the
+  managed cert dir that would redirect a write outside it) and opens files with
+  `O_NOFOLLOW`, closing an arbitrary-root-write escape the earlier lexical prefix
+  check missed.
+- The agent rejects a non-semver `vector_version` from the control plane before
+  it can be substituted into the operator's install command, preventing argument
+  or shell-metacharacter injection into that root-run command.
 - Agent TLS hardening: the agent now logs a prominent warning when
   `AGENT_INSECURE_SKIP_VERIFY` disables certificate verification; a configured
   but unreadable/unparseable `AGENT_CA_CERT` is now a fatal startup error instead

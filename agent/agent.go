@@ -12,9 +12,22 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// Strict semver (optional leading v, optional pre-release/build). The desired
+// Vector version is control-plane-supplied and substituted into the operator's
+// install command, so anything outside this shape is rejected.
+var _semverRe = regexp.MustCompile(
+	`^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`,
+)
+
+func isSemver(v string) bool {
+	return _semverRe.MatchString(v)
+}
 
 // Agent runs the poll → validate → apply → report convergence loop.
 type Agent struct {
@@ -84,8 +97,16 @@ func (a *Agent) cycle(ctx context.Context) error {
 	}
 
 	// Bring Vector to the desired version BEFORE validating/applying config, so
-	// the right binary validates it.
-	a.desiredVersion = res.VectorVersion
+	// the right binary validates it. The version comes from the control plane and
+	// is substituted into the operator's VECTOR_INSTALL_CMD, so only accept a
+	// strict semver — a crafted value must not inject args/metacharacters into
+	// that command. Empty = unmanaged.
+	if res.VectorVersion == "" || isSemver(res.VectorVersion) {
+		a.desiredVersion = res.VectorVersion
+	} else {
+		log.Printf("ignoring non-semver vector_version from server: %q", res.VectorVersion)
+		a.desiredVersion = ""
+	}
 	a.reconcileVersion(ctx)
 
 	// Write TLS cert material before the config that references it, so validate
@@ -185,31 +206,71 @@ func nextBackoff(cur time.Duration) time.Duration {
 // write (e.g. /root/.ssh/authorized_keys, /etc/cron.d/...).
 func writeConfigFiles(files []ConfigFile, certsDir string) error {
 	base := filepath.Clean(certsDir)
+	sep := string(os.PathSeparator)
 	for _, f := range files {
 		if !filepath.IsAbs(f.Path) {
 			return fmt.Errorf("cert file path must be absolute: %s", f.Path)
 		}
 		clean := filepath.Clean(f.Path)
-		if clean != base && !strings.HasPrefix(clean, base+string(os.PathSeparator)) {
+		// Fast lexical reject for obvious `..`/absolute/sibling escapes.
+		if clean != base && !strings.HasPrefix(clean, base+sep) {
 			return fmt.Errorf(
 				"refusing to write %s: outside managed cert dir %s", f.Path, base,
 			)
 		}
-		if err := os.MkdirAll(filepath.Dir(clean), 0o700); err != nil {
+		parent := filepath.Dir(clean)
+		if err := os.MkdirAll(parent, 0o700); err != nil {
 			return fmt.Errorf("mkdir for %s: %w", f.Path, err)
+		}
+		// Symlink/TOCTOU-safe: a lexical prefix check is blind to a symlink
+		// planted inside the tree that redirects a root write elsewhere. Resolve
+		// the REAL parent (after MkdirAll, base exists) and re-check containment
+		// against the resolved base.
+		realBase, err := filepath.EvalSymlinks(base)
+		if err != nil {
+			return fmt.Errorf("resolve cert dir %s: %w", base, err)
+		}
+		realParent, err := filepath.EvalSymlinks(parent)
+		if err != nil {
+			return fmt.Errorf("resolve parent of %s: %w", f.Path, err)
+		}
+		if realParent != realBase && !strings.HasPrefix(realParent, realBase+sep) {
+			return fmt.Errorf(
+				"refusing to write %s: resolves outside managed cert dir %s",
+				f.Path, realBase,
+			)
 		}
 		mode := os.FileMode(f.Mode)
 		if mode == 0 {
 			mode = 0o644
 		}
 		tmp := clean + ".tmp"
-		if err := os.WriteFile(tmp, []byte(f.Content), mode); err != nil {
+		// O_NOFOLLOW|O_EXCL: never follow or reuse a symlink at the target path,
+		// closing the final-component symlink swap. O_EXCL means a stale tmp from
+		// a prior crash must be removed first.
+		flags := os.O_CREATE | os.O_EXCL | os.O_WRONLY | syscall.O_NOFOLLOW
+		fh, err := os.OpenFile(tmp, flags, mode)
+		if err != nil {
+			_ = os.Remove(tmp)
+			fh, err = os.OpenFile(tmp, flags, mode)
+			if err != nil {
+				return fmt.Errorf("open %s: %w", tmp, err)
+			}
+		}
+		if _, err := fh.Write([]byte(f.Content)); err != nil {
+			fh.Close()
+			os.Remove(tmp)
 			return fmt.Errorf("write %s: %w", clean, err)
 		}
-		// WriteFile applies umask; enforce the intended mode (0600 for keys).
-		if err := os.Chmod(tmp, mode); err != nil {
+		// OpenFile applies umask; enforce the intended mode (0600 for keys).
+		if err := fh.Chmod(mode); err != nil {
+			fh.Close()
 			os.Remove(tmp)
 			return fmt.Errorf("chmod %s: %w", clean, err)
+		}
+		if err := fh.Close(); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("close %s: %w", tmp, err)
 		}
 		if err := os.Rename(tmp, clean); err != nil {
 			os.Remove(tmp)
