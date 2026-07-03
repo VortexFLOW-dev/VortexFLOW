@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, validate_password_policy
 from app.middleware.rbac import require_admin, require_viewer
 from app.models.user import User
 from app.services import audit
@@ -54,6 +54,12 @@ async def create_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role"
         )
+
+    if body.password:
+        try:
+            validate_password_policy(body.password)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     user = User(
         email=body.email,
@@ -162,11 +168,10 @@ async def reset_password(
 
     generated = body.new_password is None
     password = body.new_password or secrets.token_urlsafe(12)
-    if len(password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters",
-        )
+    try:
+        validate_password_policy(password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     user.hashed_password = get_password_hash(password)
     user.locked_until = None  # clear any brute-force lockout on reset

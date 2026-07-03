@@ -15,6 +15,7 @@ from app.core.netutil import client_ip
 from app.core.security import (
     decode_token,
     get_password_hash,
+    validate_password_policy,
     verify_password,
 )
 from app.middleware.auth import bearer, get_current_user
@@ -406,11 +407,10 @@ async def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    if len(body.new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters",
-        )
+    try:
+        validate_password_policy(body.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     current_user.hashed_password = get_password_hash(body.new_password)
     current_user.must_change_password = False  # requirement satisfied
     db.add(current_user)

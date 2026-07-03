@@ -13,8 +13,31 @@ from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# bcrypt hashes only the first 72 bytes of its input and ignores the rest, so
+# two different passwords sharing a 72-byte prefix would be equivalent. Reject
+# anything longer at policy time rather than silently truncating.
+BCRYPT_MAX_BYTES = 72
+MIN_PASSWORD_LENGTH = 8
+
+
+def validate_password_policy(
+    password: str, *, min_length: int = MIN_PASSWORD_LENGTH
+) -> None:
+    """Raise ``ValueError`` if the password violates policy. Enforces a minimum
+    length and bcrypt's 72-byte input limit (see ``BCRYPT_MAX_BYTES``)."""
+    if len(password) < min_length:
+        raise ValueError(f"Password must be at least {min_length} characters")
+    if len(password.encode("utf-8")) > BCRYPT_MAX_BYTES:
+        raise ValueError(
+            f"Password must be at most {BCRYPT_MAX_BYTES} bytes "
+            "(a longer password would be silently truncated by bcrypt)"
+        )
+
 
 def get_password_hash(password: str) -> str:
+    # Defense in depth: never hash a >72-byte password (silent truncation).
+    if len(password.encode("utf-8")) > BCRYPT_MAX_BYTES:
+        raise ValueError("Password exceeds the maximum length")
     return pwd_context.hash(password)
 
 

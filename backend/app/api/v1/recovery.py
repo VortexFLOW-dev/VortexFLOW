@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.auth import _get_client_ip
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, validate_password_policy
 from app.models.user import User
 from app.schemas.auth import RecoveryRequest, RecoveryStatusResponse
 from app.services import audit, redis_client
@@ -94,11 +94,10 @@ async def use_recovery(
             detail="Invalid recovery token",
         )
 
-    if len(body.new_password) < 12:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="New password must be at least 12 characters",
-        )
+    try:
+        validate_password_policy(body.new_password, min_length=12)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     # Prefer a local admin; fall back to oldest admin of any type and also
     # switch their auth_method to 'local' so the new password is usable.

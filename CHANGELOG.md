@@ -42,6 +42,12 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- Password policy is now centralized and enforces bcrypt's 72-byte input limit
+  across every set path (change, admin create/reset, recovery). bcrypt hashes
+  only the first 72 bytes, so a longer password was silently truncated — two
+  different long passwords could authenticate each other. Such passwords are now
+  rejected (byte-counted, so multi-byte characters count correctly), and
+  `get_password_hash` refuses over-length input as a backstop.
 - Login no longer leaks account existence through response timing. When there is
   no local password to verify (unknown email, an SSO/LDAP account, or an inactive
   account), the handler now performs one dummy bcrypt verify so the response time
