@@ -426,7 +426,16 @@ async def _send_email(
     msg.set_content(f"{prefix}{ev.title}\n\n{body}\n\nSeverity: {ev.severity}")
 
     # smtplib is blocking — run it off the event loop.
-    await asyncio.to_thread(_smtp_send, host, port, use_tls, username, password, msg)
+    try:
+        await asyncio.to_thread(
+            _smtp_send, host, port, use_tls, username, password, msg
+        )
+    except (OSError, smtplib.SMTPException) as e:
+        # Host/errno-free (mirrors _post_json): a raw SMTP/socket error string
+        # carries the target host and connection-refused/timeout/DNS distinction,
+        # which would turn the test button into an internal port-scan oracle. The
+        # exception type name is a coarse, safe hint for the operator.
+        raise RuntimeError(f"SMTP delivery failed: {type(e).__name__}") from None
 
 
 def _smtp_send(

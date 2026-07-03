@@ -208,8 +208,20 @@ async def test_channel(
     channel = await _get_or_404(channel_id, db)
     try:
         await notify.send_test(channel)
-    except Exception as e:  # noqa: BLE001 — report the failure to the operator
-        raise HTTPException(status_code=502, detail=f"Send failed: {e}")
+    except ValueError as e:
+        # Our own config-validation messages (e.g. "email channel needs host").
+        raise HTTPException(status_code=422, detail=str(e)[:200])
+    except RuntimeError as e:
+        # The send layer raises only sanitized errors here (URL/host/body-free —
+        # "HTTP 404 from endpoint", "SMTP delivery failed: SMTPConnectError").
+        raise HTTPException(status_code=502, detail=f"Send failed: {str(e)[:200]}")
+    except Exception:  # noqa: BLE001
+        # Anything unexpected must NOT echo the raw exception: it can carry the
+        # target host and connection-refused/timeout/DNS distinction, turning
+        # this admin action into an internal port-scan oracle.
+        raise HTTPException(
+            status_code=502, detail="Send failed: could not deliver to the endpoint"
+        )
     return {"ok": True}
 
 

@@ -42,6 +42,11 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- The notification "send test" action no longer echoes raw connection errors.
+  A raw SMTP/socket failure carries the target host and the refused/timeout/DNS
+  distinction, which turned this admin action into an internal port-scan oracle;
+  the email path now raises a host/errno-free error (like the webhook path) and
+  the endpoint surfaces only sanitized messages.
 - Instance `api_url` now rejects loopback / link-local addresses (SSRF) on both
   create and update — the server makes outbound calls to it, and the update path
   previously had no validation at all. The check is shared with the agent-
