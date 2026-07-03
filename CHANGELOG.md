@@ -42,6 +42,10 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- Personal-access-token auth no longer commits the request-scoped DB session to
+  stamp `last_used_at`. The stamp now runs in a separate short-lived session, so
+  the auth layer can't prematurely persist (or block rollback of) whatever the
+  endpoint handler later stages on its own transaction.
 - The generic rate limiter now supports failing closed on a Redis outage
   (`VORTEXFLOW_RATE_LIMIT_FAIL_CLOSED`, default off = previous fail-open
   behavior), and logs a warning whenever abuse protection degrades so a Redis

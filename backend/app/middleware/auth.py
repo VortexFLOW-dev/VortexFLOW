@@ -7,10 +7,10 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.database import AsyncSessionLocal, get_db
 from app.core.security import decode_token
 from app.models.api_token import ApiToken
 from app.models.user import User
@@ -49,12 +49,21 @@ async def _user_from_pat(credential: str, db: AsyncSession) -> User:
         raise _INVALID
 
     # Best-effort, throttled last-used stamp (don't write on every request).
+    # Use a SEPARATE session: this runs as an auth dependency, so committing the
+    # request-scoped `db` here would prematurely persist whatever the endpoint
+    # handler later stages on it (and defeat its ability to roll back). The
+    # stamp is advisory — never fail auth on it.
     if row.last_used_at is None or (now - row.last_used_at) > timedelta(minutes=1):
         try:
-            row.last_used_at = now
-            await db.commit()
+            async with AsyncSessionLocal() as stamp_db:
+                await stamp_db.execute(
+                    update(ApiToken)
+                    .where(ApiToken.id == row.id)
+                    .values(last_used_at=now)
+                )
+                await stamp_db.commit()
         except Exception:
-            await db.rollback()
+            pass
 
     return user
 
