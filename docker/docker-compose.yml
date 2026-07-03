@@ -113,6 +113,10 @@ services:
     build:
       context: ..
       dockerfile: docker/web.Dockerfile
+    environment:
+      # Opt-in: redirect human traffic on :80 to https (agent bootstrap/metrics
+      # paths stay on http). Leave unset to serve everything on both ports.
+      VORTEXFLOW_FORCE_HTTPS: ${FORCE_HTTPS:-}
     ports:
       - "80:80"
       - "443:443"

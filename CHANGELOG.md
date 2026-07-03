@@ -203,6 +203,11 @@ its first release.
 - The fleet bootstrap token is now passed in an `X-Bootstrap-Token` request
   header instead of a URL query string, so it no longer lands in nginx / reverse
   proxy access logs.
+- An optional `VORTEXFLOW_FORCE_HTTPS` redirects human traffic on port 80 to
+  HTTPS (so login credentials and the session cookie are never sent in
+  cleartext), while exempting the agent bootstrap and metrics paths (`/install/`,
+  `/vm/api/v1/write`, `/api/v1/agent/`) which a freshly-installing host still
+  needs over HTTP. Unset (default) keeps both ports serving everything.
 - The backend container runs as a non-root user.
 - Agent registration no longer reveals whether an `api_url` is registered in
   another fleet. The upsert lookup is now scoped to the target fleet (it

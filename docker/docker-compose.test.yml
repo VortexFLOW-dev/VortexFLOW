@@ -1,0 +1,34 @@
+# Isolated LOCAL TEST stack — run under a distinct project name so it never
+# touches the live vsdemo (project `docker`, on 8080/8443):
+#
+#   export VORTEXFLOW_SECRET_KEY=$(python3 -c "import secrets;print(secrets.token_hex(32))")
+#   export PUBLIC_URL=https://localhost
+#   docker compose -p vfpubtest -f docker/docker-compose.yml -f docker/docker-compose.test.yml up --build -d
+#   ... test against https://localhost (self-signed) ...
+#   docker compose -p vfpubtest -f docker/docker-compose.yml -f docker/docker-compose.test.yml down -v
+#
+# Uses host 80/443 (free here) and demo mode (seeded admin admin@example.com /
+# ChangeMe123!) + a real auto-registering agent, so the metrics ingest path is
+# exercised end-to-end.
+name: vortexflow
+
+services:
+  backend:
+    environment:
+      VORTEXFLOW_DEMO_MODE: "true"
+
+  demo-agent:
+    build:
+      context: ..
+      dockerfile: docker/demo/agent.Dockerfile
+    image: vortexflow-demo-agent:test
+    environment:
+      VORTEXFLOW_API: http://backend:8000
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: ChangeMe123!
+    depends_on:
+      backend:
+        condition: service_healthy
+      victoriametrics:
+        condition: service_healthy
+    restart: unless-stopped

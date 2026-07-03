@@ -23,5 +23,9 @@ RUN rm -f /etc/nginx/conf.d/default.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/vortexflow.conf
 COPY docker/nginx-locations.conf /etc/nginx/vortexflow-locations.conf
 COPY docker/nginx-security-headers.conf /etc/nginx/vortexflow-security-headers.conf
+COPY docker/nginx-force-https.conf /etc/nginx/vortexflow-force-https.conf
+# Runs before nginx starts (official image runs /docker-entrypoint.d/*.sh); it
+# enables the http->https redirect when VORTEXFLOW_FORCE_HTTPS is set.
+COPY docker/40-vf-force-https.sh /docker-entrypoint.d/40-vf-force-https.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80 443
