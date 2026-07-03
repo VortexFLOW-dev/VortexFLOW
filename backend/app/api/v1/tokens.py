@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.netutil import client_ip
 from app.middleware.auth import get_session_user
+from app.middleware.rbac import _block_if_password_change_required
 from app.models.api_token import ApiToken
 from app.models.user import User
 from app.services import api_token, audit
@@ -85,6 +86,9 @@ async def create_token(
     user: User = Depends(get_session_user),
     db: AsyncSession = Depends(get_db),
 ) -> TokenCreated:
+    # A PAT inherits its owner's role, so minting one would sidestep the forced
+    # password-change gate that blocks the rest of the app. Enforce it here too.
+    _block_if_password_change_required(user)
     token_id, secret, full = api_token.generate()
     expires_at = (
         datetime.now(timezone.utc) + timedelta(days=body.expires_in_days)
