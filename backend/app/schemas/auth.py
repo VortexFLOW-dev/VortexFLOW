@@ -17,7 +17,10 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Optional: the refresh token normally rides in the httpOnly cookie set at
+    # login. A body value is still accepted as a fallback (non-browser clients),
+    # but the cookie takes precedence.
+    refresh_token: str | None = None
 
 
 class LogoutRequest(BaseModel):

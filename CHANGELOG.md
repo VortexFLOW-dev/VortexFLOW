@@ -14,6 +14,14 @@ its first release.
   (asyncpg, anthropic, aiofiles) and base-image (nginx) bumps.
 
 ### Security
+- **The refresh token is now an httpOnly cookie, not localStorage.** Login,
+  refresh, and the SSO callback set the long-lived refresh token as an
+  `HttpOnly; Secure; SameSite=Strict` cookie scoped to `/api/v1/auth`; only the
+  short-lived access token stays in JS. An XSS can no longer read and exfiltrate
+  the 30-day refresh token, and SameSite=Strict (with the locked CORS allowlist)
+  protects the cookie-authenticated refresh from CSRF. Refresh/logout read the
+  token from the cookie (a request body is still accepted as a fallback for
+  non-browser clients). Existing sessions re-authenticate once after upgrade.
 - **Optional separate at-rest encryption key.** A new `VORTEXFLOW_ENCRYPTION_KEY`
   decouples at-rest secret encryption (component/SSO/AI credentials, cert private
   keys, the deploy snapshot) from JWT signing (`VORTEXFLOW_SECRET_KEY`), so the

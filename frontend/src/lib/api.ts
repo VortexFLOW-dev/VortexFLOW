@@ -45,13 +45,14 @@ api.interceptors.response.use(
   (res) => res,
   async (err: AxiosError) => {
     const original = err.config as typeof err.config & { _retry?: boolean }
-    // Don't attempt refresh for: non-401s, already-retried requests, auth
-    // endpoints, or when there's no refresh token to use in the first place.
+    // Don't attempt refresh for non-401s, already-retried requests, or auth
+    // endpoints. The refresh token itself lives in an httpOnly cookie (not
+    // JS-readable), so we can't pre-check its presence — we just try, and a
+    // missing/expired cookie makes /refresh 401, which drops through to logout.
     if (
       err.response?.status !== 401 ||
       original?._retry ||
-      _isAuthPath(original?.url) ||
-      !localStorage.getItem('refresh_token')
+      _isAuthPath(original?.url)
     ) {
       return Promise.reject(err)
     }
@@ -71,15 +72,15 @@ api.interceptors.response.use(
 
     _refreshing = true
     try {
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (!refreshToken) throw new Error('No refresh token')
-
-      const { data } = await axios.post<{ access_token: string; refresh_token: string }>(
+      // The refresh token is sent automatically as the httpOnly cookie
+      // (withCredentials for same-origin belt-and-suspenders). Only the access
+      // token comes back in the body; it stays in localStorage (short-lived).
+      const { data } = await axios.post<{ access_token: string }>(
         '/api/v1/auth/refresh',
-        { refresh_token: refreshToken }
+        {},
+        { withCredentials: true }
       )
       localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
 
       _refreshQueue.forEach((e) => e.resolve(data.access_token))
       _refreshQueue = []
@@ -104,9 +105,9 @@ api.interceptors.response.use(
 export const authApi = {
   methods: () => api.get('/auth/methods'),
   login: (email: string, password: string) =>
-    api.post('/auth/login', { email, password }),
-  logout: (refreshToken?: string | null) =>
-    api.post('/auth/logout', refreshToken ? { refresh_token: refreshToken } : {}),
+    api.post('/auth/login', { email, password }, { withCredentials: true }),
+  // The refresh token rides in the httpOnly cookie; the server reads + clears it.
+  logout: () => api.post('/auth/logout', {}, { withCredentials: true }),
   me: () => api.get('/auth/me'),
   changePassword: (current_password: string, new_password: string) =>
     api.post('/auth/change-password', { current_password, new_password }),

@@ -49,15 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const { data } = await authApi.login(email, password)
+    // Only the short-lived access token is kept in JS; the refresh token is set
+    // by the server as an httpOnly cookie (not JS-readable → XSS can't steal it).
     localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
     const me = await authApi.me()
     setUser(me.data)
   }, [])
 
   const logout = useCallback(async () => {
     try {
-      await authApi.logout(localStorage.getItem('refresh_token'))
+      await authApi.logout()
     } finally {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')

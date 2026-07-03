@@ -4,7 +4,7 @@
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,6 +37,30 @@ from app.services.sso_config import load_ldap_config
 from app.services.sso_jit import SsoConflict, jit_upsert
 
 router = APIRouter()
+
+# The refresh token lives in an httpOnly cookie (never JS-readable localStorage,
+# so an XSS can't exfiltrate the long-lived token). Scoped to the auth path so it
+# is only sent to /refresh and /logout, not on every API call. SameSite=Strict +
+# the locked CORS allowlist give CSRF protection without a separate token. Secure
+# is off only in debug (dev over http); production/HTTPS requires it.
+_REFRESH_COOKIE = "refresh_token"
+_REFRESH_COOKIE_PATH = "/api/v1/auth"
+
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=_REFRESH_COOKIE,
+        value=token,
+        httponly=True,
+        secure=not settings.debug,
+        samesite="strict",
+        path=_REFRESH_COOKIE_PATH,
+        max_age=settings.refresh_token_expire_days * 86400,
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -100,6 +124,7 @@ async def auth_methods(db: AsyncSession = Depends(get_db)) -> AuthMethodsRespons
 async def login(
     body: LoginRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     ip = _get_client_ip(request)
@@ -160,6 +185,7 @@ async def login(
         # a shared-NAT attacker reset their record by sharing an IP with a
         # legitimate user.
         access, refresh = await session.issue(u.id, u.role)
+        _set_refresh_cookie(response, refresh)
         await audit.record(action="auth.login", user_id=u.id, user_email=u.email, ip=ip)
         return TokenResponse(access_token=access, refresh_token=refresh)
 
@@ -271,10 +297,21 @@ async def login(
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
-    body: RefreshRequest, db: AsyncSession = Depends(get_db)
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
+    # Prefer the httpOnly cookie; fall back to a body value for non-browser clients.
+    refresh_token = request.cookies.get(_REFRESH_COOKIE) or (
+        body.refresh_token if body else None
+    )
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token"
+        )
     try:
-        payload = decode_token(body.refresh_token)
+        payload = decode_token(refresh_token)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
@@ -326,11 +363,14 @@ async def refresh(
     access_token, new_refresh = await session.issue(
         user.id, user.role, sid=old_sid, sst=old_sst
     )
+    _set_refresh_cookie(response, new_refresh)
     return TokenResponse(access_token=access_token, refresh_token=new_refresh)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
+    request: Request,
+    response: Response,
     body: LogoutRequest | None = None,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     current_user: User = Depends(get_current_user),
@@ -355,14 +395,19 @@ async def logout(
             # stop working immediately, not just the one presented here.
             await session.end(payload.get("sid"))
 
-    if body and body.refresh_token:
+    # Invalidate the refresh token — from the cookie (preferred) or a body value.
+    refresh_token = request.cookies.get(_REFRESH_COOKIE) or (
+        body.refresh_token if body else None
+    )
+    if refresh_token:
         try:
-            rp = decode_token(body.refresh_token)
+            rp = decode_token(refresh_token)
         except ValueError:
             rp = None
         if rp and rp.get("type") == "refresh" and rp.get("jti"):
             # Single-use consume — the refresh token can no longer mint tokens.
             await redis_client.consume_refresh_token(rp["jti"])
+    _clear_refresh_cookie(response)
 
     await audit.record(
         action="auth.logout", user_id=current_user.id, user_email=current_user.email

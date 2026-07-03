@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.auth import _set_refresh_cookie
 from app.core.config import OIDCConfig
 from app.core.database import get_db
 from app.core.netutil import client_ip
@@ -65,8 +66,13 @@ def _login_redirect(error: str) -> RedirectResponse:
 
 
 def _success_redirect(access_token: str, refresh_token: str) -> RedirectResponse:
-    frag = urlencode({"access_token": access_token, "refresh_token": refresh_token})
-    return RedirectResponse(url=f"/auth/callback#{frag}", status_code=302)
+    # Only the short-lived access token rides in the fragment (never JS-persisted);
+    # the long-lived refresh token is set as an httpOnly cookie, matching the
+    # password-login flow so an XSS can't steal it.
+    frag = urlencode({"access_token": access_token})
+    resp = RedirectResponse(url=f"/auth/callback#{frag}", status_code=302)
+    _set_refresh_cookie(resp, refresh_token)
+    return resp
 
 
 async def _issue_session(user: User, provider: str, ip: str) -> RedirectResponse:

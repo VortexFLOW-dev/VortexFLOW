@@ -19,11 +19,10 @@ export default function SsoCallback() {
       : ''
     const params = new URLSearchParams(frag)
     const access = params.get('access_token')
-    const refresh = params.get('refresh_token')
-
-    if (access && refresh) {
+    // The refresh token is delivered as an httpOnly cookie by the callback — only
+    // the short-lived access token comes back in the fragment.
+    if (access) {
       localStorage.setItem('access_token', access)
-      localStorage.setItem('refresh_token', refresh)
       // replace() so the token-bearing URL never enters history.
       window.location.replace('/')
     } else {
