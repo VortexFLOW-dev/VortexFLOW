@@ -359,6 +359,26 @@ ExecStart=/usr/local/bin/vortexflow-agent
 Restart=always
 RestartSec=5
 
+# Sandboxing (defense-in-depth for a root agent that consumes control-plane
+# input). These are safe alongside the agent's `systemctl` reload and are kept
+# even when auto-update is off. ProtectHome in particular blocks the classic
+# /root/.ssh write target if the cert-path confinement were ever bypassed.
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+# Stronger confinement — read-only system with only the config + cert dirs
+# writable. Commented out because it conflicts with the optional Vector
+# auto-update (VECTOR_INSTALL_CMD), which writes to /usr via a package manager;
+# enable it (and verify on your host) when you are NOT using agent auto-update:
+#ProtectSystem=strict
+#ReadWritePaths=/etc/vector /etc/vortexflow
+
 [Install]
 WantedBy=multi-user.target
 EOF

@@ -126,6 +126,13 @@ its first release.
 - The agent rejects a non-semver `vector_version` from the control plane before
   it can be substituted into the operator's install command, preventing argument
   or shell-metacharacter injection into that root-run command.
+- The generated agent systemd unit is now sandboxed (`NoNewPrivileges`,
+  `ProtectHome`, `PrivateTmp`, `ProtectKernel*`, `ProtectControlGroups`,
+  `RestrictSUIDSGID`, `RestrictNamespaces`, `LockPersonality`) to shrink the root
+  agent's blast radius; `ProtectHome` in particular blocks the classic
+  `/root/.ssh` write target. A stronger `ProtectSystem=strict` + `ReadWritePaths`
+  block is included commented, since it conflicts with the optional Vector
+  auto-update path.
 - Agent TLS hardening: the agent now logs a prominent warning when
   `AGENT_INSECURE_SKIP_VERIFY` disables certificate verification; a configured
   but unreadable/unparseable `AGENT_CA_CERT` is now a fatal startup error instead
