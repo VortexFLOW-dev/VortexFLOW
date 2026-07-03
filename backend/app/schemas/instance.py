@@ -6,6 +6,8 @@ from typing import Optional
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 
+from app.core.netutil import validate_agent_api_url
+
 
 class InstanceCreate(BaseModel):
     label: str
@@ -29,9 +31,8 @@ class InstanceCreate(BaseModel):
     @field_validator("api_url")
     @classmethod
     def validate_api_url(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("api_url must start with http:// or https://")
-        return v.rstrip("/")
+        # Reject loopback / link-local (SSRF); the server calls this URL.
+        return validate_agent_api_url(v)
 
 
 class InstanceUpdate(BaseModel):
@@ -53,6 +54,14 @@ class InstanceUpdate(BaseModel):
         if v is not None and v not in ("local", "agent"):
             raise ValueError("config_push_mode must be 'local' or 'agent'")
         return v
+
+    @field_validator("api_url")
+    @classmethod
+    def validate_api_url(cls, v: Optional[str]) -> Optional[str]:
+        # An update can change api_url — apply the same SSRF guard as create.
+        if v is None:
+            return v
+        return validate_agent_api_url(v)
 
 
 class InstanceResponse(BaseModel):

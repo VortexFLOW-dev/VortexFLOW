@@ -42,6 +42,11 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- Instance `api_url` now rejects loopback / link-local addresses (SSRF) on both
+  create and update — the server makes outbound calls to it, and the update path
+  previously had no validation at all. The check is shared with the agent-
+  registration validator (loopback + `169.254.0.0/16` cloud-metadata + IPv6
+  link-local blocked; RFC1918 still allowed).
 - `vector validate` output shown to editors (the fleet validate endpoint and the
   pre-deploy 409) is now scrubbed of any inlined secret values, so a validator
   error that echoes a config value can't leak a decrypted credential back to the
