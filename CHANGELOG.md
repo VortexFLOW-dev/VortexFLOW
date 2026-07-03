@@ -42,6 +42,10 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- The generic rate limiter now supports failing closed on a Redis outage
+  (`VORTEXFLOW_RATE_LIMIT_FAIL_CLOSED`, default off = previous fail-open
+  behavior), and logs a warning whenever abuse protection degrades so a Redis
+  outage that drops rate limiting is visible instead of silent.
 - CORS allowed origins are now configurable (`VORTEXFLOW_CORS_ORIGINS`, plus the
   `public_url`) and the hardcoded `localhost` dev origins are emitted only when
   `debug` is set. A production build no longer ships credentialed CORS access for

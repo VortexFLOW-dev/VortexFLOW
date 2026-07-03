@@ -6,7 +6,11 @@
 Redis client — async singleton with graceful degradation.
 
 If Redis is unavailable: token revocation is skipped (tokens remain valid
-until natural expiry), brute-force counters degrade gracefully.
+until natural expiry) and the login brute-force counters degrade open (a local
+Redis outage should not lock every user out). The generic rate limiter
+(``check_rate_limit``) degrades open by default too, but honours
+``settings.rate_limit_fail_closed`` to deny instead; either way the degradation
+is logged so an outage that drops abuse protection is visible.
 
 Key namespaces:
   revoked:{jti}   → "1"  TTL=remaining token lifetime
@@ -227,11 +231,24 @@ async def get_ttl(key: str) -> Optional[int]:
         return None
 
 
+def _degrade_allowed() -> bool:
+    """What a rate-limit check returns when Redis is unreachable. Fail open by
+    default (availability); fail closed when configured. Logged either way so a
+    Redis outage that drops abuse protection is visible to operators."""
+    from app.core.config import settings
+
+    if settings.rate_limit_fail_closed:
+        log.warning("Redis unavailable — rate limit failing CLOSED (denying)")
+        return False
+    log.warning("Redis unavailable — rate limit failing open (allowing)")
+    return True
+
+
 async def check_rate_limit(key: str, limit: int, window_seconds: int = 60) -> bool:
     """Increment a sliding counter and return True if the request is allowed."""
     r = await _get()
     if r is None:
-        return True  # fail open when Redis is unavailable
+        return _degrade_allowed()
     try:
         pipe = r.pipeline()  # type: ignore[attr-defined]
         await pipe.incr(key)
@@ -239,4 +256,4 @@ async def check_rate_limit(key: str, limit: int, window_seconds: int = 60) -> bo
         results = await pipe.execute()
         return int(results[0]) <= limit
     except Exception:
-        return True
+        return _degrade_allowed()

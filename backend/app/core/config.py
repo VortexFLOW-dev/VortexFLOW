@@ -102,6 +102,13 @@ class Settings(BaseSettings):
     lockout_duration_seconds: int = 900
     ip_block_threshold: int = 20
     ip_block_duration_seconds: int = 3600
+    # When Redis is unreachable the rate limiters can't count. Default False
+    # (fail open) keeps the app usable during a Redis outage — a local Redis
+    # outage usually means the whole stack is down anyway. Set True to fail
+    # closed (deny the rate-limited action) for high-security deployments that
+    # would rather reject requests than lose abuse protection. Either way, the
+    # degradation is logged so an outage that drops protection is visible.
+    rate_limit_fail_closed: bool = False
 
     # Data retention — a daily background sweep deletes rows older than N days
     # from the unbounded operational tables. 0 = keep forever (default; audit
