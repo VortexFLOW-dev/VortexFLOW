@@ -14,6 +14,7 @@ from app.core.database import get_db
 from app.core.netutil import client_ip
 from app.core.security import (
     decode_token,
+    dummy_verify,
     get_password_hash,
     validate_password_policy,
     verify_password,
@@ -36,12 +37,6 @@ from app.services.sso_config import load_ldap_config
 from app.services.sso_jit import SsoConflict, jit_upsert
 
 router = APIRouter()
-
-# A throwaway bcrypt hash verified against when a login has no real local
-# password to check (unknown email, SSO/LDAP account, inactive account). Burning
-# one bcrypt cycle equalizes response timing so an attacker can't enumerate
-# which emails have a local account by how fast the request is rejected.
-_DUMMY_PASSWORD_HASH = get_password_hash("vortexflow-login-timing-equalizer")
 
 
 def _get_client_ip(request: Request) -> str:
@@ -130,7 +125,7 @@ async def login(
         and bool(user.hashed_password)
     )
     if not will_verify_local:
-        verify_password(body.password, _DUMMY_PASSWORD_HASH)
+        dummy_verify()
 
     async def _fail(acct_key: str) -> None:
         await redis_client.record_login_failure(

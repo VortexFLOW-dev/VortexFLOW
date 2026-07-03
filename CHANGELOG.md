@@ -67,7 +67,9 @@ its first release.
 - Login no longer leaks account existence through response timing. When there is
   no local password to verify (unknown email, an SSO/LDAP account, or an inactive
   account), the handler now performs one dummy bcrypt verify so the response time
-  matches a real local-password check.
+  matches a real local-password check. The agent authentication path gets the
+  same treatment, so an unknown/inactive instance id can't be distinguished from
+  a wrong agent token by timing.
 - The notification "send test" action no longer echoes raw connection errors.
   A raw SMTP/socket failure carries the target host and the refused/timeout/DNS
   distinction, which turned this admin action into an internal port-scan oracle;

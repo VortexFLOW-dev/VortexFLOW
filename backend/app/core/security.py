@@ -45,6 +45,17 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
+# A precomputed bcrypt hash to verify against when an auth path has no real hash
+# to check (unknown account/instance). Burning one bcrypt cycle either way keeps
+# response timing from revealing whether the identifier exists.
+_DUMMY_HASH = pwd_context.hash("vortexflow-timing-equalizer")
+
+
+def dummy_verify() -> None:
+    """Burn one bcrypt verify — timing padding for absent-secret auth paths."""
+    pwd_context.verify("x", _DUMMY_HASH)
+
+
 def create_access_token(
     subject: Any,
     sid: Optional[str] = None,

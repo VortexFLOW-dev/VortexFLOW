@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.settings import _get_setting
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import verify_password
+from app.core.security import dummy_verify, verify_password
 from app.models.instance import Instance
 from app.models.fleet import Fleet
 from app.services import config_render, deployed_config
@@ -85,15 +85,24 @@ async def _authenticate_agent(
 
     result = await db.execute(select(Instance).where(Instance.id == instance_id))
     instance = result.scalar_one_or_none()
-    if (
-        instance is None
-        or not instance.is_active
-        or not instance.agent_token_hash
-        or not verify_password(token, instance.agent_token_hash)
-    ):
+    token_hash = (
+        instance.agent_token_hash
+        if instance is not None and instance.is_active and instance.agent_token_hash
+        else None
+    )
+    # Always burn exactly one bcrypt cycle: verify the real hash when there is
+    # one, else a dummy — so an unknown/inactive instance can't be distinguished
+    # from a wrong token by response timing (instance-id enumeration).
+    if token_hash is not None:
+        ok = verify_password(token, token_hash)
+    else:
+        dummy_verify()
+        ok = False
+    if not ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid agent token"
         )
+    assert instance is not None  # ok is True only when a real hash was verified
     return instance
 
 
