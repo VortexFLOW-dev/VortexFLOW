@@ -21,6 +21,16 @@ class Settings(BaseSettings):
     debug: bool = False
     secret_key: str  # required — set VORTEXFLOW_SECRET_KEY; generate with: python -c "import secrets; print(secrets.token_hex(32))"
 
+    # Optional dedicated key for AT-REST encryption (component/SSO/AI secrets,
+    # cert private keys, the deploy snapshot). When set, it decouples at-rest
+    # encryption from JWT signing (secret_key), so the JWT secret can be rotated
+    # without re-encrypting every stored secret, and a disclosure of one key does
+    # not compromise the other. Leave UNSET to derive at-rest encryption from
+    # secret_key (the historical behavior — no migration needed). Adopting it on
+    # an EXISTING install requires re-encrypting stored secrets (see ADR-002);
+    # a fresh install can just set it. JWT signing always uses secret_key.
+    encryption_key: Optional[str] = None
+
     # Public base URL of this VortexFlow server (e.g. https://vf.example.com).
     # Used to generate the agent install one-liner and the metrics endpoint.
     # Required behind a reverse proxy — request.base_url would otherwise be the
@@ -154,6 +164,22 @@ class Settings(BaseSettings):
                 'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return v
+
+    @field_validator("encryption_key")
+    @classmethod
+    def encryption_key_length(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) < 32:
+            raise ValueError(
+                "VORTEXFLOW_ENCRYPTION_KEY must be at least 32 characters."
+            )
+        return v
+
+    @property
+    def at_rest_key(self) -> str:
+        """The key used for AT-REST encryption (Fernet). Prefers a dedicated
+        ``encryption_key`` when set, else falls back to ``secret_key`` (historical
+        behavior). JWT signing always uses ``secret_key`` directly — never this."""
+        return self.encryption_key or self.secret_key
 
 
 settings = Settings()

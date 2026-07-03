@@ -141,7 +141,7 @@ async def agent_config(
     if not fleet.deployed_config:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED)
     try:
-        snapshot = deployed_config.decode(fleet.deployed_config, settings.secret_key)
+        snapshot = deployed_config.decode(fleet.deployed_config, settings.at_rest_key)
     except Exception:
         # Snapshot won't decrypt/parse — e.g. VORTEXFLOW_SECRET_KEY was rotated
         # after this fleet's last deploy. Degrade gracefully: keep the agent on

@@ -66,14 +66,14 @@ async def materials_for_components(
         if cert.key_pem_encrypted:
             try:
                 mat["key_pem"] = cert_crypto.decrypt(
-                    cert.key_pem_encrypted, settings.secret_key
+                    cert.key_pem_encrypted, settings.at_rest_key
                 )
             except Exception:
                 pass
         if cert.passphrase_encrypted:
             try:
                 mat["passphrase"] = cert_crypto.decrypt(
-                    cert.passphrase_encrypted, settings.secret_key
+                    cert.passphrase_encrypted, settings.at_rest_key
                 )
             except Exception:
                 pass

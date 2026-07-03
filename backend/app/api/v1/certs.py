@@ -188,11 +188,11 @@ async def upload_cert(
             raise HTTPException(
                 status_code=422, detail="Invalid private key or passphrase"
             )
-        key_enc = cert_crypto.encrypt(body.key_pem, settings.secret_key)
+        key_enc = cert_crypto.encrypt(body.key_pem, settings.at_rest_key)
 
     passphrase_enc: Optional[str] = None
     if body.passphrase:
-        passphrase_enc = cert_crypto.encrypt(body.passphrase, settings.secret_key)
+        passphrase_enc = cert_crypto.encrypt(body.passphrase, settings.at_rest_key)
 
     # Validate every block in the CA chain — partial chains with bad blocks are rejected
     if body.ca_chain_pem:

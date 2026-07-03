@@ -14,6 +14,14 @@ its first release.
   (asyncpg, anthropic, aiofiles) and base-image (nginx) bumps.
 
 ### Security
+- **Optional separate at-rest encryption key.** A new `VORTEXFLOW_ENCRYPTION_KEY`
+  decouples at-rest secret encryption (component/SSO/AI credentials, cert private
+  keys, the deploy snapshot) from JWT signing (`VORTEXFLOW_SECRET_KEY`), so the
+  JWT secret can be rotated without re-encrypting stored secrets and a disclosure
+  of one key doesn't compromise the other. It is fully backward compatible: when
+  unset, at-rest encryption continues to derive from `SECRET_KEY` (no migration).
+  A fresh install can set it directly; adopting it on an existing install needs a
+  one-time re-encryption of stored secrets (planned).
 - **Agents are served only the last successfully-deployed config.** The agent
   config endpoint now returns an encrypted snapshot of the config from the last
   successful deploy (written after `vector validate` passes), never a live DB

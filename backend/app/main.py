@@ -359,7 +359,7 @@ async def _migrate_component_secrets():
                     continue  # nothing left to migrate
                 try:
                     public, secrets_enc = secrets_svc.split_for_write(
-                        config, c.secrets_encrypted, _settings.secret_key
+                        config, c.secrets_encrypted, _settings.at_rest_key
                     )
                 except ValueError:
                     # A stored MASK-placeholder value can't be split; skip this

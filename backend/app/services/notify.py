@@ -84,7 +84,7 @@ def _decode_secret(channel: NotificationChannel) -> dict:
         return {}
     try:
         return json.loads(
-            cert_crypto.decrypt(channel.secret_encrypted, settings.secret_key)
+            cert_crypto.decrypt(channel.secret_encrypted, settings.at_rest_key)
         )
     except Exception:
         logger.error("notify: failed to decode secret for channel %s", channel.id)

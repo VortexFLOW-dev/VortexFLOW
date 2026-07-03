@@ -231,7 +231,7 @@ def _seal_secrets(new: dict, stored: dict, *fields: str) -> dict:
             if stored.get(enc_key):
                 out[enc_key] = stored[enc_key]
             elif stored.get(f):  # legacy plaintext at rest → migrate to encrypted
-                out[enc_key] = cert_crypto.encrypt(stored[f], app_settings.secret_key)
+                out[enc_key] = cert_crypto.encrypt(stored[f], app_settings.at_rest_key)
             else:
                 # MASK placeholder with nothing stored → not a real value; refuse
                 # rather than persisting an empty credential (empty-bind footgun).
@@ -239,7 +239,7 @@ def _seal_secrets(new: dict, stored: dict, *fields: str) -> dict:
                     f"'{f}' cannot be set to the placeholder value; enter a real secret"
                 )
         else:
-            out[enc_key] = cert_crypto.encrypt(incoming, app_settings.secret_key)
+            out[enc_key] = cert_crypto.encrypt(incoming, app_settings.at_rest_key)
     return out
 
 
@@ -423,7 +423,7 @@ async def apply_tls(
             detail="Selected certificate has no private key — cannot use for TLS termination",
         )
 
-    key_pem = cert_crypto.decrypt(cert.key_pem_encrypted, app_settings.secret_key)
+    key_pem = cert_crypto.decrypt(cert.key_pem_encrypted, app_settings.at_rest_key)
 
     try:
         paths = cert_crypto.write_tls_files(
@@ -520,7 +520,7 @@ def _ai_read(raw: dict) -> AiSettingsRead:
     """Build the read model, flagging a stored-but-undecryptable key."""
     pub = ai_config.public_view(raw)
     key_error = pub["api_key_set"] and (
-        ai_config.get_api_key(raw, app_settings.secret_key) is None
+        ai_config.get_api_key(raw, app_settings.at_rest_key) is None
     )
     return AiSettingsRead(**pub, key_error=key_error)
 
@@ -578,7 +578,7 @@ async def put_ai(
         raw["api_key_encrypted"] = ""
     elif incoming and incoming != MASK:
         raw["api_key_encrypted"] = ai_config.encrypt_api_key(
-            incoming, app_settings.secret_key
+            incoming, app_settings.at_rest_key
         )
     # else: leave raw["api_key_encrypted"] as loaded (unchanged)
     has_key = bool(raw.get("api_key_encrypted"))
@@ -638,7 +638,7 @@ async def test_ai(
             detail="AI test rate limit exceeded. Maximum 20 requests per minute.",
         )
     raw = await ai_config.load_raw(db)
-    result = await ai_client.test_connection(raw, app_settings.secret_key)
+    result = await ai_client.test_connection(raw, app_settings.at_rest_key)
     await audit.record(
         action="settings.ai_test",
         user_id=current_user.id,

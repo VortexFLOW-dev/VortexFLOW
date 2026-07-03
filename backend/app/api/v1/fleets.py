@@ -602,7 +602,7 @@ async def deploy_fleet(
     # un-deployed edit can no longer reach a host. Encrypted at rest: it holds
     # decrypted secrets and cert private keys. Only a successful deploy writes it.
     fleet.deployed_config = deployed_config.encode(
-        render.config, render.files, render.warnings, settings.secret_key
+        render.config, render.files, render.warnings, settings.at_rest_key
     )
     # Publish a new generation. Agents compare this to their applied generation.
     fleet.generation = (fleet.generation or 0) + 1

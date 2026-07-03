@@ -100,7 +100,7 @@ def _to_response(c: NotificationChannel) -> ChannelResponse:
 def _encrypt_secret(secret: dict) -> Optional[str]:
     if not secret:
         return None
-    return cert_crypto.encrypt(json.dumps(secret), settings.secret_key)
+    return cert_crypto.encrypt(json.dumps(secret), settings.at_rest_key)
 
 
 def _validate_type_severity(type_: str, min_severity: str) -> None:

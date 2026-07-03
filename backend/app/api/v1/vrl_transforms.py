@@ -282,7 +282,7 @@ async def ai_generate_vrl(
 
     result = await ai_generate.generate(
         raw=raw,
-        secret_key=app_settings.secret_key,
+        secret_key=app_settings.at_rest_key,
         intent=body.intent,
         event=body.event,
         current_vrl=body.current_vrl,

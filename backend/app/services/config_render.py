@@ -200,9 +200,9 @@ def _component_config(
     public = _load_config_json(c.config_json)
     enc = getattr(c, "secrets_encrypted", None)
     cfg = (
-        secrets_svc.merge_revealed(public, enc, settings.secret_key)
+        secrets_svc.merge_revealed(public, enc, settings.at_rest_key)
         if reveal_secrets
-        else secrets_svc.merge_masked(public, enc, settings.secret_key)
+        else secrets_svc.merge_masked(public, enc, settings.at_rest_key)
     )
     _apply_cert_refs(c, cfg, reveal_secrets, cert_materials, files, warnings)
     return cfg

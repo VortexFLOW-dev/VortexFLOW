@@ -33,7 +33,7 @@ def _to_response(component: Component) -> ComponentResponse:
     the MASK sentinel so the UI shows the field is set without revealing it."""
     public = json.loads(component.config_json or "{}")
     masked = secrets_svc.merge_masked(
-        public, component.secrets_encrypted, settings.secret_key
+        public, component.secrets_encrypted, settings.at_rest_key
     )
     resp = ComponentResponse.model_validate(component)
     resp.config = masked
@@ -111,7 +111,7 @@ async def create_component(
 
     try:
         public, secrets_enc = secrets_svc.split_for_write(
-            body.config, None, settings.secret_key
+            body.config, None, settings.at_rest_key
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -157,7 +157,7 @@ async def update_component(
         # stored ciphertext; only changed/new secrets are re-encrypted.
         try:
             public, secrets_enc = secrets_svc.split_for_write(
-                body.config, component.secrets_encrypted, settings.secret_key
+                body.config, component.secrets_encrypted, settings.at_rest_key
             )
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))

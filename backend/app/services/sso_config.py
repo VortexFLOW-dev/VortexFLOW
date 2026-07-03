@@ -42,7 +42,7 @@ def _secret(data: dict, field: str, env_fallback: str | None) -> str:
     enc = data.get(f"{field}_encrypted")
     if enc:
         try:
-            return cert_crypto.decrypt(enc, settings.secret_key)
+            return cert_crypto.decrypt(enc, settings.at_rest_key)
         except Exception:
             return ""
     legacy = data.get(field)
