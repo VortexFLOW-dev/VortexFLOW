@@ -160,6 +160,13 @@ its first release.
 - External alerts (webhook/Slack/email) could be silently dropped when a
   dashboard poll observed a condition transition before the background worker;
   the dashboard read path now enqueues deliveries too.
+- Deploy no longer silently publishes an unvalidated config to local-mode
+  instances when `vector validate` can't run on the server (no bundled Vector).
+  Agent-mode members re-validate before reload, but local-mode members get the
+  config written straight to their watched directory, so an invalid config would
+  break Vector fleet-wide. The deploy now refuses when validation is unavailable
+  and the fleet has any local-mode member, unless `allow_unvalidated=true` is
+  passed. A genuine validation failure is still never overridable.
 - Metrics-driven events are no longer false-resolved (a spurious "all clear")
   while VictoriaMetrics is unreachable.
 - Notification deliveries are claimed with `SELECT … FOR UPDATE SKIP LOCKED`, so

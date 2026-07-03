@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import secrets
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -524,6 +524,12 @@ async def deploy_fleet(
     fleet_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
+    allow_unvalidated: bool = Query(
+        False,
+        description="Deploy even when `vector validate` can't run on the server "
+        "(no bundled Vector). Only honoured for the unavailable case, never for a "
+        "genuine validation failure.",
+    ),
 ) -> dict:
     """Publish the fleet config to every member instance.
 
@@ -562,6 +568,34 @@ async def deploy_fleet(
                 "errors": [validation.output or "vector validate failed"],
             },
         )
+
+    # `vector validate` couldn't run here (no bundled Vector — dev box /
+    # TLS-terminated install). Agent-mode members re-validate before reload, but
+    # local-mode members get the config written straight to their watched dir
+    # with no backstop, so an invalid config would break Vector on reload across
+    # every local member. Refuse when any local-mode member exists (unless the
+    # caller explicitly overrides). A genuine `invalid` above is never overridable.
+    if validation.status == "unavailable" and not allow_unvalidated:
+        lm = await db.execute(
+            select(Instance.id)
+            .where(
+                Instance.fleet_id == fleet_id,
+                Instance.config_push_mode != "agent",
+            )
+            .limit(1)
+        )
+        if lm.first() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        "vector validate is unavailable on the server and this "
+                        "fleet has local-mode instances; refusing to push "
+                        "unvalidated config. Install Vector on the backend, or "
+                        "pass allow_unvalidated=true to override."
+                    ),
+                },
+            )
 
     # Snapshot the validated, secret-revealed render. Agents are served THIS
     # (decrypted at request time), never a live DB render — so an editor's
