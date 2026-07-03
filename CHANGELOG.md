@@ -42,6 +42,10 @@ its first release.
   defeat the create-time component-type allowlist (a source could deploy as any
   sink type) and `config.inputs` could silently re-route a sink; both are now
   dropped with a render warning.
+- A credential-named component field with a non-string value (e.g. a numeric or
+  boolean `password`/`api_key`) is now encrypted at rest like any other secret;
+  previously only string secrets were extracted, so a non-string value fell
+  through to plaintext `config_json` and showed in config previews / API reads.
 - The root agent now confines every server-supplied cert-file write to the
   managed component-certs directory (rejecting absolute paths outside it and
   `..` traversal), so a compromised or malicious control plane can no longer

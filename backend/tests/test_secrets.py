@@ -103,3 +103,21 @@ def test_mask_with_no_existing_is_dropped():
     public, enc = s.split_for_write({"token": s.MASK}, None, KEY)
     assert enc is None
     assert "token" not in public
+
+
+def test_numeric_secret_value_is_encrypted_not_plaintext():
+    # A credential-named key with a NON-string value must not fall through to
+    # plaintext public config (svc F11).
+    cfg = {"endpoint": "http://x", "password": 1234, "api_key": True}
+    public, enc = s.split_for_write(cfg, None, KEY)
+    assert public == {"endpoint": "http://x"}  # no secret leaked into public
+    assert enc is not None
+    assert "1234" not in public.get("password", "") if "password" in public else True
+    # Values round-trip through the encrypted store (types preserved via JSON).
+    revealed = s.merge_revealed(public, enc, KEY)
+    assert revealed["password"] == 1234
+    assert revealed["api_key"] is True
+    # Read path masks them.
+    masked = s.merge_masked(public, enc, KEY)
+    assert masked["password"] == s.MASK
+    assert masked["api_key"] == s.MASK

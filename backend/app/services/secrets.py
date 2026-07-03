@@ -82,8 +82,9 @@ def is_secret_key(dotkey: str) -> bool:
     return bool(_secret_re.search(dotkey))
 
 
-def _is_nonempty_str(v: object) -> bool:
-    return isinstance(v, str) and v != ""
+def _is_unset(v: object) -> bool:
+    """A secret value that means 'not provided' — dropped, never persisted."""
+    return v is None or v == ""
 
 
 def split_for_write(
@@ -95,22 +96,26 @@ def split_for_write(
 
     Works for both create (``existing_secrets_encrypted=None``) and update. A
     secret field whose incoming value is the ``MASK`` sentinel keeps its existing
-    encrypted value; a real new value replaces it. Non-string or empty secret
-    values are treated as "not set".
+    encrypted value; a real new value replaces it; an empty/absent value is
+    dropped. A real value is encrypted **regardless of type** — a numeric or
+    boolean value under a credential-named key (e.g. ``password: 1234``) must not
+    fall through to plaintext public config.
     """
     existing = decrypt(existing_secrets_encrypted, secret_key)
     public: dict = {}
     secrets: dict = {}
     for k, v in incoming.items():
-        if is_secret_key(k) and _is_nonempty_str(v):
-            if v == MASK:
-                if k in existing:
-                    secrets[k] = existing[k]  # unchanged — preserve
-                # else: masked but nothing stored → treat as unset, drop
-            else:
-                secrets[k] = v
-        else:
+        if not is_secret_key(k):
             public[k] = v
+            continue
+        if v == MASK:
+            if k in existing:
+                secrets[k] = existing[k]  # unchanged — preserve
+            # else: masked but nothing stored → treat as unset, drop
+        elif _is_unset(v):
+            public[k] = v  # empty/absent — nothing to hide, keep it public
+        else:
+            secrets[k] = v  # real secret of any type → encrypt
     return public, encrypt(secrets, secret_key)
 
 
