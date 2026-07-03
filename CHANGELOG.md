@@ -83,6 +83,12 @@ its first release.
   previously had no validation at all. The check is shared with the agent-
   registration validator (loopback + `169.254.0.0/16` cloud-metadata + IPv6
   link-local blocked; RFC1918 still allowed).
+- **The SSRF protection is now enforced at call time, not just on input.** Every
+  server-initiated outbound call to a Vector instance (health, topology,
+  per-component metrics, live tap) resolves the target host and rejects it if any
+  resolved address is loopback / link-local — closing the bypass where a DNS name
+  (or an alternate IP encoding / IPv4-mapped IPv6) resolves to an internal
+  address despite passing the input-time literal check.
 - `vector validate` output shown to editors (the fleet validate endpoint and the
   pre-deploy 409) is now scrubbed of any inlined secret values, so a validator
   error that echoes a config value can't leak a decrypted credential back to the

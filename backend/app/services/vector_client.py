@@ -30,9 +30,19 @@ import httpx
 import websockets
 import websockets.exceptions
 
+from app.core.netutil import assert_resolved_host_public
+
 log = logging.getLogger("vortexflow.vector")
 
 _TIMEOUT = httpx.Timeout(5.0, connect=3.0)
+
+
+async def _guard_api_url(api_url: str) -> None:
+    """SSRF guard for a server-initiated outbound call: resolve the host and
+    reject loopback / link-local targets (cloud-metadata etc.). Enforced here at
+    call time because a DNS name resolving to an internal address, or an alt IP
+    encoding, slips past the input-time literal validator. Raises ValueError."""
+    await assert_resolved_host_public(urlparse(api_url).hostname or "")
 
 
 def _ssl_context(tls_verify: bool, tls_ca_cert: Optional[str]) -> bool | ssl.SSLContext:
@@ -128,6 +138,7 @@ async def get_health(
       { reachable: bool, vector_version: str|None, uptime_seconds: float|None, error: str|None }
     """
     try:
+        await _guard_api_url(api_url)
         async with httpx.AsyncClient(
             timeout=_TIMEOUT, verify=_ssl_context(tls_verify, tls_ca_cert)
         ) as client:
@@ -173,6 +184,7 @@ async def get_topology(
     Returns raw components list or raises VectorClientError.
     """
     try:
+        await _guard_api_url(api_url)
         async with httpx.AsyncClient(
             timeout=_TIMEOUT, verify=_ssl_context(tls_verify, tls_ca_cert)
         ) as client:
@@ -224,6 +236,7 @@ async def get_component_metrics(
     }
     """
     try:
+        await _guard_api_url(api_url)
         async with httpx.AsyncClient(
             timeout=_TIMEOUT, verify=_ssl_context(tls_verify, tls_ca_cert)
         ) as client:
@@ -266,6 +279,7 @@ async def tap_component(
     received = 0
 
     try:
+        await _guard_api_url(api_url)
         ws_kwargs: dict[str, Any] = {
             "subprotocols": ["graphql-ws"],
             "open_timeout": 5,
@@ -341,6 +355,9 @@ async def tap_component(
             # Cancel the subscription cleanly
             await ws.send(json.dumps({"type": "stop", "id": "tap-1"}))
 
+    except ValueError as e:
+        # SSRF guard rejection (blocked/unresolvable host).
+        raise VectorClientError(str(e)) from e
     except websockets.exceptions.WebSocketException as e:
         raise VectorClientError(f"WebSocket error: {e}") from e
     except OSError as e:
