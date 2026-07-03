@@ -1365,20 +1365,38 @@ function toYamlValue(value: unknown, indent: number): string {
   return String(value)
 }
 
-// Expand dot-notation key "a.b.c" into nested YAML lines at given indent.
-function dotKeyToYaml(key: string, value: unknown, baseIndent: number): string[] {
-  const parts = key.split('.')
-  const lines: string[] = []
-  const pad = ' '.repeat(baseIndent)
-  if (parts.length === 1) {
-    lines.push(`${pad}${key}: ${toYamlValue(value, baseIndent + 2)}`)
-  } else {
-    // Emit each nesting level, then the leaf value
+// Merge dot-notation keys ("a.b", "a.c") into one nested object so shared
+// parents are emitted once. Building this before serializing avoids duplicate
+// mapping keys (e.g. two `tls:` blocks) that made the preview invalid YAML.
+function nestDotKeys(flat: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(flat)) {
+    const parts = key.split('.')
+    let cursor = out
     for (let i = 0; i < parts.length - 1; i++) {
-      lines.push(`${' '.repeat(baseIndent + i * 2)}${parts[i]}:`)
+      const p = parts[i]
+      const existing = cursor[p]
+      if (existing === null || typeof existing !== 'object' || Array.isArray(existing)) {
+        cursor[p] = {}
+      }
+      cursor = cursor[p] as Record<string, unknown>
     }
-    const leafPad = ' '.repeat(baseIndent + (parts.length - 1) * 2)
-    lines.push(`${leafPad}${parts[parts.length - 1]}: ${toYamlValue(value, baseIndent + parts.length * 2)}`)
+    cursor[parts[parts.length - 1]] = value
+  }
+  return out
+}
+
+// Serialize a nested object to YAML lines at the given indent.
+function objectToYaml(obj: Record<string, unknown>, indent: number): string[] {
+  const pad = ' '.repeat(indent)
+  const lines: string[] = []
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      lines.push(`${pad}${key}:`)
+      lines.push(...objectToYaml(value as Record<string, unknown>, indent + 2))
+    } else {
+      lines.push(`${pad}${key}: ${toYamlValue(value, indent + 2)}`)
+    }
   }
   return lines
 }
@@ -1447,10 +1465,12 @@ export function generateYaml(
     flat[field.key] = isSecretKey(field.key) ? '••••••••' : coerced
   }
 
-  // Build YAML — expand dot-notation keys into nested blocks
-  const lines: string[] = [`${kind}:`, `  ${safeName}:`]
-  for (const [key, value] of Object.entries(flat)) {
-    lines.push(...dotKeyToYaml(key, value, 4))
-  }
+  // Merge dot-notation keys into one nested object, then serialize — so shared
+  // parents (e.g. tls.*) render as a single block, not duplicate mapping keys.
+  const lines: string[] = [
+    `${kind}:`,
+    `  ${safeName}:`,
+    ...objectToYaml(nestDotKeys(flat), 4),
+  ]
   return lines.join('\n')
 }

@@ -65,7 +65,9 @@ its first release.
   race in that helper.
 - The component config "Generated YAML" preview and its "Copy YAML" action now
   mask secret fields (`password`, `token`, `api_key`, …) instead of rendering the
-  typed value in plaintext, matching the backend's masked config preview.
+  typed value in plaintext, matching the backend's masked config preview. The
+  preview also now merges dot-notation keys into a single nested block (e.g.
+  `tls.*`) instead of emitting duplicate parent keys, so the copied YAML is valid.
 - Creating a personal access token now enforces the forced-password-change gate.
   A PAT inherits its owner's role, so a user required to rotate their password
   could previously mint one and use it to bypass the gate; token creation now
