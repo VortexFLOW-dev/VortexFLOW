@@ -19,7 +19,7 @@ from app.core.security import (
     validate_password_policy,
     verify_password,
 )
-from app.middleware.auth import bearer, get_current_user
+from app.middleware.auth import bearer, get_current_user, get_optional_user
 from app.models.user import User
 from app.schemas.auth import (
     AuthMethodsResponse,
@@ -41,8 +41,9 @@ router = APIRouter()
 # The refresh token lives in an httpOnly cookie (never JS-readable localStorage,
 # so an XSS can't exfiltrate the long-lived token). Scoped to the auth path so it
 # is only sent to /refresh and /logout, not on every API call. SameSite=Strict +
-# the locked CORS allowlist give CSRF protection without a separate token. Secure
-# is off only in debug (dev over http); production/HTTPS requires it.
+# the locked CORS allowlist give CSRF protection without a separate token. The
+# Secure flag tracks settings.session_cookie_secure (default True) — transport
+# security, deliberately independent of `debug`.
 _REFRESH_COOKIE = "refresh_token"
 _REFRESH_COOKIE_PATH = "/api/v1/auth"
 
@@ -52,7 +53,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         key=_REFRESH_COOKIE,
         value=token,
         httponly=True,
-        secure=not settings.debug,
+        secure=settings.session_cookie_secure,
         samesite="strict",
         path=_REFRESH_COOKIE_PATH,
         max_age=settings.refresh_token_expire_days * 86400,
@@ -60,7 +61,14 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    response.delete_cookie(_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
+    # Mirror the set attributes so the deletion reliably matches the cookie.
+    response.delete_cookie(
+        _REFRESH_COOKIE,
+        path=_REFRESH_COOKIE_PATH,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="strict",
+    )
 
 
 def _get_client_ip(request: Request) -> str:
@@ -144,7 +152,11 @@ async def login(
     # branch — so the 429-vs-401 response can't reveal whether the email has a
     # (local) account. Runs before the timing equalizer so a locked response
     # returns without a bcrypt cycle for both cases (symmetric).
-    lock_key = f"acct:{user.id}" if user is not None else f"email:{body.email}"
+    # Normalize the email for the per-email key so an attacker can't spread
+    # failures across case/whitespace variants to stay under the lockout threshold.
+    lock_key = (
+        f"acct:{user.id}" if user is not None else f"email:{body.email.strip().lower()}"
+    )
     if await redis_client.get_login_failures(lock_key) >= settings.max_login_attempts:
         await audit.record(
             action="auth.login_locked",
@@ -373,12 +385,22 @@ async def logout(
     response: Response,
     body: LogoutRequest | None = None,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_user),
 ) -> None:
-    """Revoke the presented access token for its remaining lifetime, and (if
-    supplied) invalidate the refresh token, so neither can be reused after
-    logout. Session JWTs only — personal access tokens are managed via /tokens.
+    """Revoke the presented access token (if any) for its remaining lifetime,
+    invalidate the refresh token, end the session, and clear the refresh cookie.
+
+    Deliberately does NOT require a valid access token: a user whose access token
+    has already expired must still be able to log out and have the httpOnly
+    refresh cookie cleared + its token consumed — otherwise the 30-day cookie
+    would survive a logout. Session JWTs only; PATs are managed via /tokens.
     """
+    sid_to_end: str | None = None
+    user_id: str | None = None
+    user_email: str | None = None
+    if current_user is not None:
+        user_id, user_email = current_user.id, current_user.email
+
     if credentials:
         try:
             payload = decode_token(credentials.credentials)
@@ -391,9 +413,7 @@ async def logout(
                 remaining = int(exp - datetime.now(timezone.utc).timestamp())
                 if remaining > 0:
                     await redis_client.revoke_token(jti, remaining)
-            # End the session so its other access tokens and the refresh token
-            # stop working immediately, not just the one presented here.
-            await session.end(payload.get("sid"))
+            sid_to_end = payload.get("sid")
 
     # Invalidate the refresh token — from the cookie (preferred) or a body value.
     refresh_token = request.cookies.get(_REFRESH_COOKIE) or (
@@ -404,14 +424,20 @@ async def logout(
             rp = decode_token(refresh_token)
         except ValueError:
             rp = None
-        if rp and rp.get("type") == "refresh" and rp.get("jti"):
-            # Single-use consume — the refresh token can no longer mint tokens.
-            await redis_client.consume_refresh_token(rp["jti"])
+        if rp and rp.get("type") == "refresh":
+            if rp.get("jti"):
+                # Single-use consume — the refresh token can no longer mint tokens.
+                await redis_client.consume_refresh_token(rp["jti"])
+            # End the session even if we had no valid access token above.
+            sid_to_end = sid_to_end or rp.get("sid")
+            user_id = user_id or rp.get("sub")
+
+    # End the session so all its access tokens + the refresh token stop working.
+    if sid_to_end:
+        await session.end(sid_to_end)
     _clear_refresh_cookie(response)
 
-    await audit.record(
-        action="auth.logout", user_id=current_user.id, user_email=current_user.email
-    )
+    await audit.record(action="auth.logout", user_id=user_id, user_email=user_email)
 
 
 @router.get("/me", response_model=MeResponse)

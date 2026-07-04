@@ -361,9 +361,15 @@ async def _migrate_component_secrets():
                     public, secrets_enc = secrets_svc.split_for_write(
                         config, c.secrets_encrypted, _settings.at_rest_key
                     )
-                except ValueError:
-                    # A stored MASK-placeholder value can't be split; skip this
-                    # component rather than aborting the whole migration.
+                except ValueError as e:
+                    # A stored MASK-placeholder value (or a masked reference to a
+                    # secret encrypted under a different key — e.g. encryption_key
+                    # set before `reencrypt_secrets` was run) can't be split. Skip
+                    # this component rather than aborting, but log it so the skip
+                    # isn't silent.
+                    logger.warning(
+                        "component secret migration skipped component %s: %s", c.id, e
+                    )
                     continue
                 c.config_json = _json.dumps(public)
                 if secrets_enc is not None:

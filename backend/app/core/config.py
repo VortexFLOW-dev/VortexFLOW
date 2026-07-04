@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     # fails open if Redis is unavailable (tokens still expire normally).
     session_idle_timeout_minutes: int = 45
     session_absolute_hours: int = 12
+    # `Secure` flag on the refresh-token cookie. Defaults True (production is
+    # HTTPS): the cookie is then only ever sent over TLS. Set False ONLY for a
+    # local dev server reached over plain http (otherwise the browser withholds
+    # the cookie and refresh breaks). Deliberately NOT tied to `debug` — transport
+    # security is orthogonal to debug logging.
+    session_cookie_secure: bool = True
     # Trusted reverse proxies in front of the app (nginx = 1). The client IP is
     # read this many hops from the right of X-Forwarded-For so a spoofed header
     # can't forge it. Set 0 if the app is directly exposed (ignore XFF).
@@ -178,6 +184,22 @@ class Settings(BaseSettings):
         if v is not None and len(v) < 32:
             raise ValueError(
                 "VORTEXFLOW_ENCRYPTION_KEY must be at least 32 characters."
+            )
+        return v
+
+    @field_validator("metrics_write_token")
+    @classmethod
+    def metrics_write_token_charset(cls, v: Optional[str]) -> Optional[str]:
+        # Embedded into the agent's Vector config (a YAML value inside a shell
+        # heredoc). Constrain to a URL-safe token charset so a quote, backtick, or
+        # `$` can never break the YAML or trigger shell expansion at (root) install
+        # time. Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+        import re as _re
+
+        if v is not None and not _re.fullmatch(r"[A-Za-z0-9._~+/=-]{16,}", v):
+            raise ValueError(
+                "VORTEXFLOW_METRICS_WRITE_TOKEN must be >=16 chars of "
+                "[A-Za-z0-9._~+/=-] (a URL-safe token)."
             )
         return v
 

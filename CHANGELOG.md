@@ -21,7 +21,11 @@ its first release.
   the 30-day refresh token, and SameSite=Strict (with the locked CORS allowlist)
   protects the cookie-authenticated refresh from CSRF. Refresh/logout read the
   token from the cookie (a request body is still accepted as a fallback for
-  non-browser clients). Existing sessions re-authenticate once after upgrade.
+  non-browser clients). Existing sessions re-authenticate once after upgrade. The
+  cookie's `Secure` flag tracks a dedicated `VORTEXFLOW_SESSION_COOKIE_SECURE`
+  (default true, independent of `debug`), and logout no longer requires a valid
+  access token — an expired-session logout still consumes the refresh token,
+  ends the session, and clears the cookie.
 - **Optional separate at-rest encryption key.** A new `VORTEXFLOW_ENCRYPTION_KEY`
   decouples at-rest secret encryption (component/SSO/AI credentials, cert private
   keys, the deploy snapshot) from JWT signing (`VORTEXFLOW_SECRET_KEY`), so the
@@ -46,7 +50,10 @@ its first release.
   keeps the path open (backward compatible). Live-verified end-to-end: anonymous
   and wrong-token writes are 401, the correct token reaches VM. (When enabled,
   external agents' writes depend on the backend for the auth check; Vector
-  buffers/retries, and the leader's own metrics write to VM directly.)
+  buffers/retries, and the leader's own metrics write to VM directly.) The auth
+  subrequest target isn't reachable from the front door (so it can't be abused as
+  a token-validity oracle), and the token is constrained to a URL-safe charset so
+  it can't break the agent's Vector config.
 - **Server-side session lifecycle.** Logout now revokes the access token,
   invalidates the refresh token, and ends the session; sessions enforce an idle
   timeout and an absolute cap; refresh-token replay fails closed; and the client

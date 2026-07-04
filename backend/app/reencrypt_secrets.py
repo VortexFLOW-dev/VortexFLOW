@@ -22,8 +22,14 @@ Safe to run:
   * **Dry-run by default** — pass ``--commit`` to write.
   * **Idempotent** — a value already readable with the NEW key is left untouched,
     so a re-run (or a partial previous run) is safe.
-  * **Fails closed** — if a value decrypts with neither the NEW nor the OLD key,
-    the run aborts before writing anything, rather than corrupting data.
+  * **Skips orphans per-item** — a value that decrypts with neither the NEW nor
+    the OLD key (orphaned ciphertext from a prior key, which the app already
+    tolerates, e.g. a stale deploy snapshot) is left UNCHANGED and reported; the
+    run migrates everything else and commits. It does NOT abort the whole run on
+    an orphan (that would make migration impossible whenever any stale blob
+    exists). If EVERY value is undecryptable — or if any value is skipped — the
+    run warns, so a wrong ``--old-key`` is caught. Take a DB backup before
+    ``--commit``.
 """
 
 from __future__ import annotations
@@ -176,12 +182,13 @@ def main() -> int:
         )
         for w in skipped:
             print(f"  - {w}", file=sys.stderr)
-        if changed == 0:
-            print(
-                "WARNING: nothing was migrated and everything was undecryptable — "
-                "is --old-key correct?",
-                file=sys.stderr,
-            )
+        # Any skip is worth a second look — if these aren't the stale/orphaned
+        # blobs you expect, --old-key is probably wrong (and none of them migrate).
+        print(
+            "WARNING: some values were skipped — confirm these are expected orphans; "
+            "if not, --old-key is likely wrong (skipped values are never migrated).",
+            file=sys.stderr,
+        )
 
     if args.commit:
         print(f"Re-encrypted {changed} secret value(s) to the new key.")
