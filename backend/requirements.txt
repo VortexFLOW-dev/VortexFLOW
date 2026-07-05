@@ -17,7 +17,7 @@ cryptography==48.0.1
 ldap3==2.9.1
 python3-saml==1.16.0
 email-validator==2.2.0
-slowapi==0.1.9
+slowapi==0.1.10
 # (authlib removed 2026-06-20 — unused dead dep; generic OIDC uses httpx
 #  directly in auth_oidc.py. Eliminated 9 advisories + supply-chain surface.)
 requests==2.33.0
