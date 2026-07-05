@@ -119,7 +119,7 @@
   "inputs": {
     "schema/vector-0.56.0-schema.json": "5bee894383e86e8e18046180075b817f9aaf94dcaa00f76f13b37a8c4f4a94fa",
     "src/lib/catalogGen.ts": "269e09adcd3f3587d30252f2b7078765cba54870f379127e1c0b189de61a99c0",
-    "src/lib/catalog.ts": "28085038b50ebc73c611a0499df252b770bb7dcae89ca8c89332d642aca1c164",
+    "src/lib/catalog.ts": "87d783e2e4e7acc0604aba28374047bf830c3a4d5d6d9a273bc8fd7515963949",
     "src/lib/catalog.generated.ts": "db3fc0ec0183f43e02bfac43469c624a2ef2622f664c24f655ca2e9fa5766651"
   }
 }
