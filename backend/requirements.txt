@@ -10,7 +10,7 @@ python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 python-multipart==0.0.31
-pyyaml==6.0.2
+pyyaml==6.0.3
 aiofiles==25.1.0
 msal==1.36.0
 cryptography==48.0.1
