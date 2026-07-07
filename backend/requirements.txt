@@ -24,5 +24,5 @@ requests==2.34.2
 websockets==14.1
 # AI assistant (BYO-LLM) — VRL/AI plan B2. anthropic for Claude; openai SDK
 # doubles for OpenAI and any OpenAI-compatible self-hosted endpoint (Ollama/vLLM).
-anthropic==0.114.0
+anthropic==0.116.0
 openai==2.44.0
