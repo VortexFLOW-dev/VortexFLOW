@@ -1,4 +1,15 @@
 version: 2
+
+# Grouping policy
+# ---------------
+# Each ecosystem opens at most two grouped PRs per week: one for patch bumps and one
+# for minor bumps. MAJORS are deliberately left out of every group so they arrive as
+# individual PRs — a major is a migration, not a merge button (tailwind 3→4, bcrypt
+# 4→5 and websockets 14→16 all needed hands-on work).
+#
+# Only the `*-patch` groups are eligible for auto-merge; see
+# .github/workflows/dependabot-auto-merge.yml.
+
 updates:
   # Backend Python deps
   - package-ecosystem: pip
@@ -7,6 +18,15 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     labels: ['dependencies', 'backend']
+    groups:
+      backend-patch:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['patch']
+      backend-minor:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['minor']
     ignore:
       # msal 1.36.0 requires cryptography<49 — hold the 49+ bump until msal
       # relaxes the cap (otherwise dependency resolution / Azure SSO breaks).
@@ -20,6 +40,15 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     labels: ['dependencies', 'frontend']
+    groups:
+      frontend-patch:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['patch']
+      frontend-minor:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['minor']
 
   # Go agent
   - package-ecosystem: gomod
@@ -27,13 +56,39 @@ updates:
     schedule:
       interval: weekly
     labels: ['dependencies', 'agent']
+    groups:
+      agent-patch:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['patch']
+      agent-minor:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['minor']
 
   # Container base images
+  #
+  # Base-image MAJORS are ignored, not just ungrouped. CI is amd64-only and does not
+  # build the images, so a bad base tag passes every check: node:25-alpine (PR #38) was
+  # green while being a never-LTS line that went EOL 2026-06-01 AND unbundling corepack
+  # (breaks the web build). python 3.12 / node 22 are pinned deliberately — bump them by
+  # hand against https://github.com/nodejs/Release and verify with a real `build-images`
+  # dispatch. Patch/minor of the pinned line still flows through.
   - package-ecosystem: docker
     directory: /docker
     schedule:
       interval: weekly
     labels: ['dependencies', 'docker']
+    groups:
+      docker-patch:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['patch']
+    ignore:
+      - dependency-name: 'node'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'python'
+        update-types: ['version-update:semver-major']
 
   # GitHub Actions used by the workflows
   - package-ecosystem: github-actions
@@ -41,3 +96,12 @@ updates:
     schedule:
       interval: weekly
     labels: ['dependencies', 'ci']
+    groups:
+      actions-patch:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['patch']
+      actions-minor:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['minor']

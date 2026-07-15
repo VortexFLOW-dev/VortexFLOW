@@ -1,0 +1,41 @@
+name: Dependabot auto-merge
+
+# Auto-merge PATCH-level Dependabot updates only.
+#
+# Scope is deliberately narrow:
+#   - patch only — minor and major always wait for a human. A minor can carry
+#     behaviour changes (fastapi/anthropic are 0.x, where "minor" IS breaking).
+#   - Dependabot only — `github.actor` is checked, and `pull_request_target` from a
+#     fork cannot impersonate it.
+#   - Nothing is merged until the required status checks on `main` pass. This job only
+#     ENABLES auto-merge; GitHub holds the PR until branch protection is satisfied.
+#
+# `pull_request_target` runs with write permissions against the BASE repo. This job
+# never checks out or executes PR code — it only reads metadata and calls the API.
+# Do not add `actions/checkout` here.
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # For a grouped PR, update-type is the HIGHEST semver bump in the group, so a
+      # group containing any minor/major is correctly excluded here.
+      - name: Enable auto-merge for patch updates
+        if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
