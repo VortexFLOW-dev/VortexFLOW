@@ -15,23 +15,53 @@ follow-up; nothing here mutates state.
 
 from __future__ import annotations
 
-import json
+import functools
+import logging
 from pathlib import Path
 from typing import Any
+
+import json
 
 from mcp.server.fastmcp import Context, FastMCP
 from sqlalchemy import func, select
 
-from app.mcp.auth import authed_session
+from app.mcp.auth import McpAuthError, authed_session, require_user
 from app.models.component import Component
 from app.models.fleet import Fleet
 from app.models.instance import Instance
 from app.models.route import Route
 from app.models.transform_stage import TransformStage
 from app.models.vrl_transform import VrlTransform
+from app.services.redis_client import check_rate_limit
 from app.services.vrl_runner import run_vrl
 
+logger = logging.getLogger(__name__)
+
 _CATALOG_TYPES = Path(__file__).resolve().parent.parent / "data" / "catalog_types.json"
+
+# Per-user cap for the VRL validate tool, SHARING the REST key so a caller can't
+# double their subprocess budget by splitting load across MCP and the REST API.
+_VRL_RATE_LIMIT = 60  # requests/min per user — matches /transforms/validate
+
+
+def _guard(fn):
+    """Let intended errors (auth failures, not-found, rate-limit) reach the
+    caller verbatim, but collapse any UNEXPECTED exception (DB driver text,
+    subprocess internals) into a generic message so it can't leak infrastructure
+    detail — even though the caller is already authenticated."""
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except (McpAuthError, ValueError):
+            raise
+        except Exception as exc:  # noqa: BLE001 — genericize, don't leak
+            logger.warning("MCP tool %s failed: %s", fn.__name__, exc)
+            raise ValueError(f"internal error in {fn.__name__}") from None
+
+    return wrapper
+
 
 mcp = FastMCP(
     "VortexFlow",
@@ -59,19 +89,26 @@ async def _fleet_or_error(db, fleet_id: str) -> Fleet:
 
 # ── VRL ───────────────────────────────────────────────────────────────────────
 @mcp.tool()
+@_guard
 async def validate_vrl(
     source: str, ctx: Context, event: dict[str, Any] | None = None
 ) -> dict:
     """Validate/execute a VRL program against Vector's compiler and return the
     diagnostics. `event` is a sample event the program runs against (defaults to
     an empty object). Use this to check VRL before saving it as a transform."""
-    async with authed_session(ctx):
-        result = await run_vrl(source, event or {})
+    # Auth only (no DB needed past this point); release the connection before the
+    # subprocess. Rate-limited per user (shared with the REST validate endpoint)
+    # so an authed caller can't spawn unbounded concurrent `vector` subprocesses.
+    user = await require_user(ctx)
+    if not await check_rate_limit(f"vrl_validate_rate:{user.id}", _VRL_RATE_LIMIT):
+        raise ValueError("VRL validate rate limit exceeded — max 60 requests/minute.")
+    result = await run_vrl(source, event or {})
     return {"ok": result.ok, "output": result.output, "error": result.error}
 
 
 # ── fleets ──────────────────────────────────────────────────────────────────
 @mcp.tool()
+@_guard
 async def list_fleets(ctx: Context) -> list[dict]:
     """List all fleets (named groups of Vector instances sharing one config),
     with their current config generation and member/component counts."""
@@ -105,6 +142,7 @@ async def list_fleets(ctx: Context) -> list[dict]:
 
 
 @mcp.tool()
+@_guard
 async def get_fleet(fleet_id: str, ctx: Context) -> dict:
     """Get one fleet with a summary of its components, routes, and transform
     stages. Use `render_fleet_config` for the full Vector YAML it deploys."""
@@ -144,6 +182,7 @@ async def get_fleet(fleet_id: str, ctx: Context) -> dict:
 
 
 @mcp.tool()
+@_guard
 async def list_components(fleet_id: str, ctx: Context) -> list[dict]:
     """List a fleet's components (Vector sources and sinks) with their type and
     the ids of the components/stages that feed each one."""
@@ -172,6 +211,7 @@ async def list_components(fleet_id: str, ctx: Context) -> list[dict]:
 
 
 @mcp.tool()
+@_guard
 async def list_routes(fleet_id: str, ctx: Context) -> list[dict]:
     """List a fleet's routes (conditional branching transforms) with their branch
     names."""
@@ -200,6 +240,7 @@ async def list_routes(fleet_id: str, ctx: Context) -> list[dict]:
 
 
 @mcp.tool()
+@_guard
 async def render_fleet_config(fleet_id: str, ctx: Context) -> dict:
     """Render the Vector YAML config VortexFlow would deploy for this fleet.
     Secrets are masked (this is a preview, not the deployed material). Returns the
@@ -216,6 +257,7 @@ async def render_fleet_config(fleet_id: str, ctx: Context) -> dict:
 
 # ── transforms + catalog ────────────────────────────────────────────────────
 @mcp.tool()
+@_guard
 async def list_transforms(ctx: Context) -> list[dict]:
     """List the reusable VRL transform library (saved, named VRL programs)."""
     async with authed_session(ctx) as (db, _user):
@@ -236,11 +278,12 @@ async def list_transforms(ctx: Context) -> list[dict]:
 
 
 @mcp.tool()
+@_guard
 async def get_catalog(ctx: Context, kind: str | None = None) -> dict:
     """List the Vector source/sink types this deployment accepts (the component
     catalog). `kind` filters to "source" or "sink"; omit for both."""
-    async with authed_session(ctx):
-        data = json.loads(_CATALOG_TYPES.read_text(encoding="utf-8"))
+    await require_user(ctx)  # auth only; the catalog is a static file, no DB
+    data = json.loads(_CATALOG_TYPES.read_text(encoding="utf-8"))
     catalog = {
         "schema_version": data.get("schema_version"),
         "sources": data.get("sources", []),
@@ -258,6 +301,7 @@ async def get_catalog(ctx: Context, kind: str | None = None) -> dict:
 
 # ── instances ───────────────────────────────────────────────────────────────
 @mcp.tool()
+@_guard
 async def list_instances(ctx: Context, fleet_id: str | None = None) -> list[dict]:
     """List Vector instances, optionally scoped to one fleet. Includes each
     instance's role, agent status, and config-generation lag (applied vs. the

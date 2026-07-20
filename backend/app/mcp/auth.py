@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.middleware.auth import _user_from_pat
+from app.middleware.rbac import ROLE_HIERARCHY
 from app.models.user import User
 from app.services import api_token
 
@@ -54,4 +55,21 @@ async def authed_session(ctx: Context) -> AsyncIterator[tuple[AsyncSession, User
             user = await _user_from_pat(token, db)
         except Exception as exc:  # noqa: BLE001 — collapse to one opaque failure
             raise McpAuthError("invalid, expired, or revoked token") from exc
+        # Mirror the REST role dependencies so MCP genuinely "inherits the user's
+        # role" rather than relying on the coincidence of the current role set:
+        # a pending forced password change blocks API use even for a valid PAT,
+        # and every tool requires at least viewer.
+        if user.must_change_password:
+            raise McpAuthError("password change required — rotate it in the UI first")
+        if ROLE_HIERARCHY.get(user.role, 0) < ROLE_HIERARCHY["viewer"]:
+            raise McpAuthError("insufficient role for read access")
         yield db, user
+
+
+async def require_user(ctx: Context) -> User:
+    """Auth-only variant: resolve the caller and RELEASE the DB session before
+    returning. For tools that don't touch the DB after auth (e.g. validate_vrl,
+    get_catalog) so a pooled connection isn't held across a subprocess/file read.
+    """
+    async with authed_session(ctx) as (_db, user):
+        return user
