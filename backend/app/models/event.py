@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, Index, String, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -25,6 +25,15 @@ class Event(Base):
     """
 
     __tablename__ = "events"
+    __table_args__ = (
+        # At most one *unresolved* event per dedup_key (idempotent detection).
+        Index(
+            "ux_events_open_dedup_key",
+            "dedup_key",
+            unique=True,
+            postgresql_where=text("resolved_at IS NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid.uuid4())

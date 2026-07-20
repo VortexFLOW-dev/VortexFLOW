@@ -22,6 +22,18 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vortexflow
+          POSTGRES_PASSWORD: vortexflow
+          POSTGRES_DB: vortexflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vortexflow"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -41,10 +53,10 @@ jobs:
           pip install ruff==0.15.17 mypy==1.13.0 'sqlalchemy[mypy]' pytest
 
       - name: Ruff (lint)
-        run: ruff check app
+        run: ruff check app alembic
 
       - name: Ruff (format check)
-        run: ruff format --check app
+        run: ruff format --check app alembic
 
       - name: Unit tests
         # Generate a throwaway key at runtime (settings need one at import) — never
@@ -52,6 +64,17 @@ jobs:
         run: |
           export VORTEXFLOW_SECRET_KEY="$(openssl rand -hex 32)"
           PYTHONPATH=. pytest -q
+
+      - name: Migration drift guard (models == migrations)
+        # Apply all migrations to a clean DB, then fail if the models have drifted
+        # from the migration graph (i.e. someone changed a model without running
+        # `make migration`). This replaces the Sentinel C2 hand-parsed ALTER check.
+        env:
+          VORTEXFLOW_DATABASE_URL: postgresql+asyncpg://vortexflow:vortexflow@localhost:5432/vortexflow
+        run: |
+          export VORTEXFLOW_SECRET_KEY="$(openssl rand -hex 32)"
+          PYTHONPATH=. alembic upgrade head
+          PYTHONPATH=. alembic check
 
       # mypy has known full-app gaps the per-file pre-commit hook doesn't hit;
       # surfaced here but not yet gating (tracked for cleanup).

@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await _run_schema_upgrades()
+    await _run_migrations()
     await _migrate_component_secrets()
     await _bootstrap_admin()
     await _bootstrap_default_fleet()
@@ -159,8 +159,18 @@ async def _retention_worker():
         await asyncio.sleep(max(1, _settings.retention_sweep_hours) * 3600)
 
 
-async def _run_schema_upgrades():
-    """Provision DB schema on startup. No Alembic — add new columns here."""
+async def _legacy_ensure_baseline():
+    """Idempotently bring a PRE-ALEMBIC database up to the 0001 baseline schema.
+
+    Runs only during the one-time cutover for installs provisioned by the
+    original startup-DDL mechanism (detected by a missing ``alembic_version``
+    table in ``_run_migrations``). Every statement is a no-op on an
+    already-current DB, so a direct upgrade from ANY prior version lands exactly
+    at the baseline before Alembic takes over.
+
+    New schema changes are Alembic migrations now — do NOT add columns here.
+    Generate one with ``make migration m="..."`` after editing the models.
+    """
     from sqlalchemy import text
 
     async with engine.begin() as conn:
@@ -315,6 +325,52 @@ async def _run_schema_upgrades():
                 " ON notification_deliveries (event_id, channel_id, transition)"
             )
         )
+
+
+def _alembic_config(connection):
+    """Alembic Config wired to an existing (sync) Connection so startup
+    migrations reuse the app engine instead of opening a second one. Paths are
+    resolved from this file so it works regardless of the process cwd."""
+    from pathlib import Path
+
+    from alembic.config import Config
+
+    backend_dir = Path(__file__).resolve().parent.parent  # app/ -> backend/
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    cfg.attributes["connection"] = connection
+    return cfg
+
+
+async def _run_migrations():
+    """Bring the DB schema to Alembic head.
+
+    Handles the one-time cutover from the pre-Alembic startup-DDL mechanism:
+    a database that has application tables but no ``alembic_version`` is first
+    brought fully up to the baseline (``_legacy_ensure_baseline``), then stamped
+    at the baseline revision so Alembic adopts it without re-creating anything.
+    Fresh and already-Alembic-managed databases skip straight to ``upgrade head``.
+    """
+    from alembic import command
+    from sqlalchemy import inspect
+
+    def _probe(sync_conn):
+        insp = inspect(sync_conn)
+        return insp.has_table("alembic_version"), insp.has_table("users")
+
+    async with engine.connect() as conn:
+        managed, provisioned = await conn.run_sync(_probe)
+
+    if not managed and provisioned:
+        logger.info("adopting Alembic on a pre-Alembic database — stamping baseline")
+        await _legacy_ensure_baseline()
+        async with engine.connect() as conn:
+            await conn.run_sync(
+                lambda c: command.stamp(_alembic_config(c), "0001_baseline")
+            )
+
+    async with engine.connect() as conn:
+        await conn.run_sync(lambda c: command.upgrade(_alembic_config(c), "head"))
 
 
 def _bootstrap_tls():

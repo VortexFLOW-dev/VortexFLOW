@@ -46,6 +46,10 @@ COPY --from=py-build /venv /venv
 ENV PATH="/venv/bin:$PATH"
 WORKDIR /app
 COPY backend/app ./app
+# Alembic config + migrations: the backend runs `alembic upgrade head` on
+# startup (app.main._run_migrations), resolving these paths relative to /app.
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
 COPY --from=agent-build /out/ /app/agent-bin/
 # Bundle the Vector binary (from the stage above) so the server can run
 # `vector generate-schema` (live source/sink catalog) and `vector validate`
