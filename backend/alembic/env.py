@@ -21,23 +21,18 @@ from app.core.config import settings
 from app.core.database import Base
 
 # ── populate Base.metadata: import EVERY model module ────────────────────────
-# Keep this list exhaustive. The `alembic check` CI gate fails if a model is
-# added without a matching migration, but only if its module is imported here.
-from app.models import (  # noqa: E402,F401
-    api_token,
-    audit_log,
-    certificate,
-    component,
-    event,
-    fleet,
-    instance,
-    notification,
-    route,
-    system_setting,
-    transform_stage,
-    user,
-    vrl_transform,
-)
+# Imported programmatically (not a hand-kept list) so a newly added model file
+# can't be silently omitted — the `alembic check` drift gate only sees tables
+# whose module is imported here, so a missed import would let a new table ship
+# with no migration. This is exactly the hand-list failure mode the retired
+# Sentinel C2 check had; don't reintroduce it as an explicit import block.
+import importlib  # noqa: E402
+import pkgutil  # noqa: E402
+
+import app.models as _models_pkg  # noqa: E402
+
+for _module in pkgutil.iter_modules(_models_pkg.__path__):
+    importlib.import_module(f"{_models_pkg.__name__}.{_module.name}")
 
 config = context.config
 if config.config_file_name is not None:

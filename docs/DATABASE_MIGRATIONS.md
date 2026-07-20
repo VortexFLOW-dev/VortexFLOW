@@ -36,9 +36,11 @@ Databases provisioned by the original startup-DDL mechanism have no
 `_run_migrations()`:
 
 1. Detects application tables but no `alembic_version`.
-2. Runs `_legacy_ensure_baseline()` — the original idempotent DDL, preserved
-   verbatim — so a database on **any** prior version is brought fully up to the
-   `0001_baseline` schema.
+2. Runs `_legacy_ensure_baseline()` — the original idempotent DDL, but creating
+   only the **frozen `0001` baseline table set** (never the live model metadata,
+   which would also build tables added by later migrations and then collide with
+   them). A database on **any** prior version is brought up to the `0001_baseline`
+   schema, and only that.
 3. **Stamps** the database at `0001_baseline` (records the version without
    re-creating anything).
 4. Runs `upgrade head` to apply any migrations added after the baseline.

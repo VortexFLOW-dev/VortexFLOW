@@ -100,10 +100,6 @@ sentinel-online: ## Sentinel incl. docker/network checks (A2 schema vs binary, A
 sentinel-test: ## Run the Sentinel's drift-injection test suite
 	PYTHONPATH=$(BE):. $(BE)/$(PY)/pytest contracts/tests -q
 
-.PHONY: sentinel-baseline
-sentinel-baseline: ## Snapshot model columns for the C2 schema-drift check (run at release)
-	$(SENTINEL) baseline
-
 # ── agent ────────────────────────────────────────────────────────────────────
 # Cross-compile the Go agent. Uses local `go` if present, else the golang:1.26
 # docker image (matches the backend image build + go.mod's 1.26.4 requirement).

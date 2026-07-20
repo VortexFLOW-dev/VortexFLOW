@@ -2,7 +2,7 @@
 
 Revision ID: 0001_baseline
 Revises:
-Create Date: 2026-07-20 07:42:20.506818
+Create Date: 2026-07-20 10:54:03.351689
 """
 
 from collections.abc import Sequence
@@ -102,7 +102,9 @@ def upgrade() -> None:
         sa.Column("description", sa.String(), nullable=True),
         sa.Column("bootstrap_token_hash", sa.String(), nullable=True),
         sa.Column("is_default", sa.Boolean(), nullable=False),
-        sa.Column("generation", sa.Integer(), nullable=False),
+        sa.Column(
+            "generation", sa.Integer(), server_default=sa.text("0"), nullable=False
+        ),
         sa.Column("deployed_config", sa.Text(), nullable=True),
         sa.Column("desired_vector_version", sa.String(), nullable=True),
         sa.Column("created_by", sa.String(), nullable=True),
@@ -164,7 +166,12 @@ def upgrade() -> None:
         sa.Column("sso_subject", sa.String(), nullable=True),
         sa.Column("sso_groups", sa.String(), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("must_change_password", sa.Boolean(), nullable=False),
+        sa.Column(
+            "must_change_password",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
         sa.Column("locked_until", sa.String(), nullable=True),
         sa.Column(
             "created_at",
@@ -239,7 +246,7 @@ def upgrade() -> None:
         sa.Column("config_json", sa.Text(), nullable=False),
         sa.Column("secrets_encrypted", sa.Text(), nullable=True),
         sa.Column("cert_refs_json", sa.Text(), nullable=True),
-        sa.Column("inputs_json", sa.Text(), nullable=False),
+        sa.Column("inputs_json", sa.Text(), server_default="[]", nullable=False),
         sa.Column("created_by", sa.String(), nullable=True),
         sa.Column(
             "created_at",
@@ -271,14 +278,16 @@ def upgrade() -> None:
         sa.Column("agent_token_hash", sa.String(), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("fleet_id", sa.String(), nullable=True),
-        sa.Column("role", sa.String(), nullable=False),
+        sa.Column("role", sa.String(), server_default="agent", nullable=False),
         sa.Column("data_dir", sa.String(), nullable=True),
         sa.Column("expire_metrics_secs", sa.Integer(), nullable=True),
         sa.Column("applied_generation", sa.Integer(), nullable=True),
         sa.Column("agent_last_seen", sa.DateTime(timezone=True), nullable=True),
         sa.Column("agent_status", sa.String(), nullable=True),
         sa.Column("vector_version", sa.String(), nullable=True),
-        sa.Column("tls_verify", sa.Boolean(), nullable=False),
+        sa.Column(
+            "tls_verify", sa.Boolean(), server_default=sa.text("true"), nullable=False
+        ),
         sa.Column("tls_ca_cert", sa.String(), nullable=True),
         sa.Column("created_by", sa.String(), nullable=True),
         sa.Column(
@@ -337,8 +346,10 @@ def upgrade() -> None:
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("branches_json", sa.Text(), nullable=False),
-        sa.Column("source_ids_json", sa.Text(), nullable=False),
-        sa.Column("passthrough_sink_ids_json", sa.Text(), nullable=False),
+        sa.Column("source_ids_json", sa.Text(), server_default="[]", nullable=False),
+        sa.Column(
+            "passthrough_sink_ids_json", sa.Text(), server_default="[]", nullable=False
+        ),
         sa.Column("created_by", sa.String(), nullable=True),
         sa.Column(
             "created_at",

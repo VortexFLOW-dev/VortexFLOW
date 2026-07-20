@@ -43,7 +43,9 @@ class Component(Base):
     # Direct upstream ids a sink reads (source/stage), in addition to any
     # route-branch outputs that target it. Lets a destination be wired without a
     # route (quick-connect / fan-out). Unused for sources.
-    inputs_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    inputs_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

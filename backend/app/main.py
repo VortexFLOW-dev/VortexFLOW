@@ -159,6 +159,29 @@ async def _retention_worker():
         await asyncio.sleep(max(1, _settings.retention_sweep_hours) * 3600)
 
 
+# The tables that exist at the 0001 baseline. FROZEN — this set must never
+# change; tables added by later migrations arrive via those migrations, not the
+# legacy adopt path (see the create_all restriction in _legacy_ensure_baseline).
+_BASELINE_TABLES = frozenset(
+    {
+        "users",
+        "instances",
+        "vrl_transforms",
+        "audit_log",
+        "fleets",
+        "routes",
+        "components",
+        "transform_stages",
+        "events",
+        "notification_channels",
+        "notification_deliveries",
+        "certificates",
+        "system_settings",
+        "api_tokens",
+    }
+)
+
+
 async def _legacy_ensure_baseline():
     """Idempotently bring a PRE-ALEMBIC database up to the 0001 baseline schema.
 
@@ -204,7 +227,22 @@ async def _legacy_ensure_baseline():
                 )
             )
         # ────────────────────────────────────────────────────────────────────
-        await conn.run_sync(Base.metadata.create_all)
+        # Create any MISSING baseline tables — but ONLY the frozen 0001 set, never
+        # the live model metadata. A pre-Alembic DB already has these (this is a
+        # no-op); the restriction matters because `create_all` of the live models
+        # would also build tables added by LATER migrations, which the subsequent
+        # `upgrade head` would then collide with (create_table on an existing
+        # table → crash). New tables must arrive via their migration, not here.
+        await conn.run_sync(
+            lambda c: Base.metadata.create_all(
+                c,
+                tables=[
+                    Base.metadata.tables[t]
+                    for t in _BASELINE_TABLES
+                    if t in Base.metadata.tables
+                ],
+            )
+        )
         await conn.execute(
             text(
                 "ALTER TABLE instances ADD COLUMN IF NOT EXISTS fleet_id VARCHAR"
@@ -352,11 +390,21 @@ async def _run_migrations():
     Fresh and already-Alembic-managed databases skip straight to ``upgrade head``.
     """
     from alembic import command
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
 
     def _probe(sync_conn):
         insp = inspect(sync_conn)
-        return insp.has_table("alembic_version"), insp.has_table("users")
+        # "Managed" requires an actual version row, not just the table: a stamp
+        # interrupted after CREATE but before INSERT leaves an empty
+        # alembic_version, which must fall through to the adopt/fresh path rather
+        # than skip the bring-up and then collide on `upgrade head`.
+        managed = False
+        if insp.has_table("alembic_version"):
+            managed = (
+                sync_conn.execute(text("SELECT 1 FROM alembic_version LIMIT 1")).first()
+                is not None
+            )
+        return managed, insp.has_table("users")
 
     async with engine.connect() as conn:
         managed, provisioned = await conn.run_sync(_probe)

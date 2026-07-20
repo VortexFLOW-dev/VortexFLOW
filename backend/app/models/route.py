@@ -27,10 +27,12 @@ class Route(Base):
     # destinations live in passthrough_sink_ids_json.
     branches_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     # Source component ids that feed this route (the route transform's inputs).
-    source_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source_ids_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
     # Sink component ids the _unmatched (passthrough) output feeds.
     passthrough_sink_ids_json: Mapped[str] = mapped_column(
-        Text, nullable=False, default="[]"
+        Text, nullable=False, default="[]", server_default="[]"
     )
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(
