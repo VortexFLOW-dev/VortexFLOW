@@ -1,7 +1,7 @@
 fastapi==0.139.0
-uvicorn[standard]==0.32.1
-pydantic==2.10.3
-pydantic-settings==2.6.1
+uvicorn[standard]==0.51.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
 sqlalchemy[asyncio]==2.0.51
 asyncpg==0.31.0
 redis[hiredis]==8.0.1
@@ -16,7 +16,7 @@ msal==1.37.0
 cryptography==48.0.1
 ldap3==2.9.1
 python3-saml==1.16.0
-email-validator==2.2.0
+email-validator==2.3.0
 slowapi==0.1.10
 # (authlib removed 2026-06-20 — unused dead dep; generic OIDC uses httpx
 #  directly in auth_oidc.py. Eliminated 9 advisories + supply-chain surface.)
@@ -25,4 +25,4 @@ websockets==14.1
 # AI assistant (BYO-LLM) — VRL/AI plan B2. anthropic for Claude; openai SDK
 # doubles for OpenAI and any OpenAI-compatible self-hosted endpoint (Ollama/vLLM).
 anthropic==0.116.0
-openai==2.44.0
+openai==2.45.0
