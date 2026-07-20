@@ -76,6 +76,10 @@ newer-Vector-available).
   what the picker offers; the Sentinel's **C1** check keeps the two in lockstep.
 - **Auth:** local (bcrypt + JWT), Personal Access Tokens (`vf_pat_*`, SHA-256 at
   rest), and SSO (OIDC, Azure, SAML, LDAP). RBAC roles: Admin / Editor / Viewer.
+- **MCP server** (`backend/app/mcp/`, opt-in `VORTEXFLOW_MCP_ENABLED`) — a
+  read-only Model Context Protocol endpoint at `/mcp`, PAT-authenticated. Tools
+  call the same service functions as the REST routes (no duplicated logic).
+  Read-only for now; writes/deploy are a gated follow-up. See [`docs/MCP.md`](docs/MCP.md).
 
 ## Security
 
