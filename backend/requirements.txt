@@ -21,7 +21,7 @@ slowapi==0.1.10
 # (authlib removed 2026-06-20 — unused dead dep; generic OIDC uses httpx
 #  directly in auth_oidc.py. Eliminated 9 advisories + supply-chain surface.)
 requests==2.34.2
-websockets==14.1
+websockets==16.1.1
 # AI assistant (BYO-LLM) — VRL/AI plan B2. anthropic for Claude; openai SDK
 # doubles for OpenAI and any OpenAI-compatible self-hosted endpoint (Ollama/vLLM).
 anthropic==0.116.0
