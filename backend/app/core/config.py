@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379/0"
 
+    # MCP server (Model Context Protocol). Off by default — when enabled, the
+    # backend serves a read-only MCP endpoint at /mcp (streamable HTTP),
+    # authenticated with personal access tokens. Writes are a separate, gated
+    # follow-up. Enable with VORTEXFLOW_MCP_ENABLED=true.
+    mcp_enabled: bool = False
+
     # VictoriaMetrics
     vm_url: str = "http://localhost:8428"
 

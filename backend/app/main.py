@@ -49,7 +49,11 @@ async def lifespan(app: FastAPI):
     # Background worker: prune unbounded operational tables on a daily sweep.
     retention = asyncio.create_task(_retention_worker())
 
-    yield
+    # The MCP server (when enabled) needs its session-manager task group running
+    # for the lifetime of the app. Mounted sub-apps don't receive lifespan events,
+    # so we run it here. `nullcontext` keeps the happy path allocation-free.
+    async with _mcp_lifespan():
+        yield
 
     for task in (worker, retention):
         task.cancel()
@@ -58,6 +62,16 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     await engine.dispose()
+
+
+def _mcp_lifespan():
+    if not settings.mcp_enabled:
+        from contextlib import nullcontext
+
+        return nullcontext()
+    from app.mcp.server import mcp as mcp_server
+
+    return mcp_server.session_manager.run()
 
 
 app = FastAPI(
@@ -104,6 +118,13 @@ app.add_middleware(  # type: ignore[attr-defined]
 
 app.include_router(api_router, prefix="/api/v1")  # type: ignore[attr-defined]
 app.include_router(install_router, prefix="/install", tags=["install"])  # type: ignore[attr-defined]
+
+# Read-only MCP server at /mcp (opt-in via VORTEXFLOW_MCP_ENABLED). Mounting also
+# creates the session manager that the lifespan runs. PAT-authenticated per tool.
+if settings.mcp_enabled:
+    from app.mcp.server import build_asgi_app
+
+    app.mount("/mcp", build_asgi_app())  # type: ignore[attr-defined]
 
 
 @app.get("/api/v1/health")  # type: ignore[attr-defined]
