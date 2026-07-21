@@ -6,10 +6,13 @@
 
     python -m contracts.sentinel check            # offline checks; exit 1 on any BLOCK
     python -m contracts.sentinel check --online   # + docker/network A2/A3 (P2)
-    python -m contracts.sentinel baseline         # snapshot model columns for C2
 
 Run from the repo root with the backend importable,
-e.g. `make sentinel`."""
+e.g. `make sentinel`.
+
+Schema/column drift (the retired C2 check) is now owned by Alembic: CI runs
+`alembic upgrade head && alembic check`, which fails if the models drift from
+the migration graph. See backend/alembic + docs/DATABASE_MIGRATIONS.md."""
 
 from __future__ import annotations
 
@@ -26,15 +29,16 @@ from .checks import (  # noqa: E402
     catalog_consistency,
     catalog_regen,
     pin_consistency,
-    schema_columns,
     vector_binary,
     vector_version,
 )
-from .core import report, sources  # noqa: E402
+from .core import report  # noqa: E402
 from .core.drift import Finding, block  # noqa: E402
 
-# Offline P1 checks (no docker/node/DB), in display order.
-OFFLINE_CHECKS = [pin_consistency, catalog_consistency, schema_columns, catalog_regen]
+# Offline P1 checks (no docker/node/DB), in display order. Schema/column drift
+# (formerly C2) moved to Alembic (`alembic check` in CI) when the DB gained real
+# migrations — a migration graph is a truer source than a hand-parsed ALTER list.
+OFFLINE_CHECKS = [pin_consistency, catalog_consistency, catalog_regen]
 # P2 checks needing docker/network; skip gracefully when unavailable.
 ONLINE_CHECKS = [vector_binary, vector_version]
 
@@ -64,19 +68,6 @@ def _check(online: bool = False) -> int:
     return 1 if has_block else 0
 
 
-def _baseline() -> int:
-    manifest = sources.load_catalog_manifest()
-    version = manifest.get("schema_version", "unknown")
-    columns = sources.load_model_columns()
-    path = sources.write_baseline(version, columns)
-    total = sum(len(c) for c in columns.values())
-    print(
-        f"Wrote baseline for {len(columns)} table(s) / {total} column(s) to "
-        f"{path.relative_to(sources.REPO_ROOT)}"
-    )
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="contracts.sentinel")
     sub = parser.add_subparsers(dest="cmd")
@@ -86,9 +77,5 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run docker/network checks (A2 schema, A3 version); skip gracefully if unavailable",
     )
-    sub.add_parser("baseline", help="snapshot model columns for the C2 check")
     args = parser.parse_args(argv)
-
-    if args.cmd == "baseline":
-        return _baseline()
     return _check(online=getattr(args, "online", False))

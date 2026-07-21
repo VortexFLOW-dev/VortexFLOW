@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-from sqlalchemy import String, Boolean, DateTime, Integer, Text, func
+from sqlalchemy import String, Boolean, DateTime, Integer, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 import uuid
@@ -20,7 +20,9 @@ class Fleet(Base):
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Published config generation. Bumped on Deploy/rollback; agents pull the
     # published generation and only reload when it changes.
-    generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     # Fernet-encrypted snapshot of the last SUCCESSFULLY-deployed render (the
     # config dict + cert files + warnings). Agents are served this snapshot, never
     # a live DB render, so an un-deployed edit can't reach a host. Encrypted at

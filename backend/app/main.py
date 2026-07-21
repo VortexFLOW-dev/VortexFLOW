@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await _run_schema_upgrades()
+    await _run_migrations()
     await _migrate_component_secrets()
     await _bootstrap_admin()
     await _bootstrap_default_fleet()
@@ -159,8 +159,41 @@ async def _retention_worker():
         await asyncio.sleep(max(1, _settings.retention_sweep_hours) * 3600)
 
 
-async def _run_schema_upgrades():
-    """Provision DB schema on startup. No Alembic — add new columns here."""
+# The tables that exist at the 0001 baseline. FROZEN — this set must never
+# change; tables added by later migrations arrive via those migrations, not the
+# legacy adopt path (see the create_all restriction in _legacy_ensure_baseline).
+_BASELINE_TABLES = frozenset(
+    {
+        "users",
+        "instances",
+        "vrl_transforms",
+        "audit_log",
+        "fleets",
+        "routes",
+        "components",
+        "transform_stages",
+        "events",
+        "notification_channels",
+        "notification_deliveries",
+        "certificates",
+        "system_settings",
+        "api_tokens",
+    }
+)
+
+
+async def _legacy_ensure_baseline():
+    """Idempotently bring a PRE-ALEMBIC database up to the 0001 baseline schema.
+
+    Runs only during the one-time cutover for installs provisioned by the
+    original startup-DDL mechanism (detected by a missing ``alembic_version``
+    table in ``_run_migrations``). Every statement is a no-op on an
+    already-current DB, so a direct upgrade from ANY prior version lands exactly
+    at the baseline before Alembic takes over.
+
+    New schema changes are Alembic migrations now — do NOT add columns here.
+    Generate one with ``make migration m="..."`` after editing the models.
+    """
     from sqlalchemy import text
 
     async with engine.begin() as conn:
@@ -194,7 +227,22 @@ async def _run_schema_upgrades():
                 )
             )
         # ────────────────────────────────────────────────────────────────────
-        await conn.run_sync(Base.metadata.create_all)
+        # Create any MISSING baseline tables — but ONLY the frozen 0001 set, never
+        # the live model metadata. A pre-Alembic DB already has these (this is a
+        # no-op); the restriction matters because `create_all` of the live models
+        # would also build tables added by LATER migrations, which the subsequent
+        # `upgrade head` would then collide with (create_table on an existing
+        # table → crash). New tables must arrive via their migration, not here.
+        await conn.run_sync(
+            lambda c: Base.metadata.create_all(
+                c,
+                tables=[
+                    Base.metadata.tables[t]
+                    for t in _BASELINE_TABLES
+                    if t in Base.metadata.tables
+                ],
+            )
+        )
         await conn.execute(
             text(
                 "ALTER TABLE instances ADD COLUMN IF NOT EXISTS fleet_id VARCHAR"
@@ -315,6 +363,62 @@ async def _run_schema_upgrades():
                 " ON notification_deliveries (event_id, channel_id, transition)"
             )
         )
+
+
+def _alembic_config(connection):
+    """Alembic Config wired to an existing (sync) Connection so startup
+    migrations reuse the app engine instead of opening a second one. Paths are
+    resolved from this file so it works regardless of the process cwd."""
+    from pathlib import Path
+
+    from alembic.config import Config
+
+    backend_dir = Path(__file__).resolve().parent.parent  # app/ -> backend/
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    cfg.attributes["connection"] = connection
+    return cfg
+
+
+async def _run_migrations():
+    """Bring the DB schema to Alembic head.
+
+    Handles the one-time cutover from the pre-Alembic startup-DDL mechanism:
+    a database that has application tables but no ``alembic_version`` is first
+    brought fully up to the baseline (``_legacy_ensure_baseline``), then stamped
+    at the baseline revision so Alembic adopts it without re-creating anything.
+    Fresh and already-Alembic-managed databases skip straight to ``upgrade head``.
+    """
+    from alembic import command
+    from sqlalchemy import inspect, text
+
+    def _probe(sync_conn):
+        insp = inspect(sync_conn)
+        # "Managed" requires an actual version row, not just the table: a stamp
+        # interrupted after CREATE but before INSERT leaves an empty
+        # alembic_version, which must fall through to the adopt/fresh path rather
+        # than skip the bring-up and then collide on `upgrade head`.
+        managed = False
+        if insp.has_table("alembic_version"):
+            managed = (
+                sync_conn.execute(text("SELECT 1 FROM alembic_version LIMIT 1")).first()
+                is not None
+            )
+        return managed, insp.has_table("users")
+
+    async with engine.connect() as conn:
+        managed, provisioned = await conn.run_sync(_probe)
+
+    if not managed and provisioned:
+        logger.info("adopting Alembic on a pre-Alembic database — stamping baseline")
+        await _legacy_ensure_baseline()
+        async with engine.connect() as conn:
+            await conn.run_sync(
+                lambda c: command.stamp(_alembic_config(c), "0001_baseline")
+            )
+
+    async with engine.connect() as conn:
+        await conn.run_sync(lambda c: command.upgrade(_alembic_config(c), "head"))
 
 
 def _bootstrap_tls():

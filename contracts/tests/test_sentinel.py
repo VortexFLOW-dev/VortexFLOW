@@ -14,7 +14,6 @@ from contracts.sentinel.checks import (
     catalog_consistency,
     catalog_regen,
     pin_consistency,
-    schema_columns,
     vector_binary,
     vector_version,
 )
@@ -33,7 +32,7 @@ def _blocks(findings):
 # ── the real repo must be clean (this is what CI enforces) ────────────────────
 def test_repo_is_clean():
     findings = []
-    for mod in (pin_consistency, catalog_consistency, schema_columns, catalog_regen):
+    for mod in (pin_consistency, catalog_consistency, catalog_regen):
         findings.extend(mod.run())
     assert not _blocks(findings), f"unexpected blocking drift: {_blocks(findings)}"
 
@@ -143,56 +142,8 @@ def test_c1_kind_aware(monkeypatch):
     assert "C1.sinks_mismatch" in blocks and "C1.sources_mismatch" in blocks
 
 
-# ── C2 model columns ⟷ baseline + ALTERs ──────────────────────────────────────
-def _c2_setup(monkeypatch, *, current, baseline, alters):
-    monkeypatch.setattr(
-        sources, "load_catalog_manifest", lambda: {"schema_version": "x"}
-    )
-    monkeypatch.setattr(sources, "load_baseline", lambda v: baseline)
-    monkeypatch.setattr(sources, "load_model_columns", lambda: current)
-    monkeypatch.setattr(sources, "load_upgrade_alters", lambda: alters)
-
-
-def test_c2_new_column_without_alter_blocks(monkeypatch):
-    _c2_setup(
-        monkeypatch,
-        current={"users": {"id", "email", "new_col"}},  # new_col added
-        baseline={"users": ["id", "email"]},
-        alters=set(),  # no ALTER for it
-    )
-    findings = schema_columns.run()
-    assert "C2.missing_alter" in _blocks(findings)
-    assert "users.new_col" in findings[0].delta["added"]
-
-
-def test_c2_new_column_with_alter_is_clean(monkeypatch):
-    _c2_setup(
-        monkeypatch,
-        current={"users": {"id", "email", "new_col"}},
-        baseline={"users": ["id", "email"]},
-        alters={("users", "new_col")},  # ALTER present
-    )
-    assert not _blocks(schema_columns.run())
-
-
-def test_c2_new_table_is_not_blocked(monkeypatch):
-    _c2_setup(
-        monkeypatch,
-        current={"users": {"id"}, "brand_new": {"id", "x"}},
-        baseline={"users": ["id"]},  # brand_new table absent from baseline
-        alters=set(),
-    )
-    findings = schema_columns.run()
-    assert not _blocks(findings)
-    assert "C2.new_table" in _ids(findings, Severity.INFO)
-
-
-def test_c2_missing_baseline_blocks(monkeypatch):
-    monkeypatch.setattr(
-        sources, "load_catalog_manifest", lambda: {"schema_version": "x"}
-    )
-    monkeypatch.setattr(sources, "load_baseline", lambda v: None)
-    assert "C2.no_baseline" in _blocks(schema_columns.run())
+# Schema/column drift (the retired C2 check) is now enforced by Alembic:
+# CI runs `alembic upgrade head && alembic check` in the backend job.
 
 
 # ── A1 catalog regen freshness ────────────────────────────────────────────────

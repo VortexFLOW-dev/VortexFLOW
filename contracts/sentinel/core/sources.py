@@ -17,7 +17,6 @@ import re
 import shutil
 import ssl
 import subprocess
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -26,7 +25,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FRONTEND = REPO_ROOT / "frontend"
 BACKEND = REPO_ROOT / "backend"
-BASELINE_DIR = REPO_ROOT / "contracts" / "baseline"
 
 CATALOG_MANIFEST = FRONTEND / "src" / "lib" / "catalog.manifest.json"
 BACKEND_CATALOG_TYPES = BACKEND / "app" / "data" / "catalog_types.json"
@@ -35,7 +33,6 @@ CATALOG_GENERATED_TS = FRONTEND / "src" / "lib" / "catalog.generated.ts"
 SCHEMA_DIR = FRONTEND / "schema"
 MAKEFILE = REPO_ROOT / "Makefile"
 COMPOSE = REPO_ROOT / "docker" / "docker-compose.yml"
-MAIN_PY = BACKEND / "app" / "main.py"
 
 
 # ── file helpers ──────────────────────────────────────────────────────────────
@@ -71,50 +68,6 @@ def load_backend_types() -> dict[str, set[str]]:
         "sources": set(data.get("sources", [])),
         "sinks": set(data.get("sinks", [])),
     }
-
-
-# ── backend app imports (lazy — only the app-touching checks pay for these) ───
-def _ensure_backend_on_path() -> None:
-    # Append (not insert-at-0) so backend modules can't shadow stdlib/site packages.
-    p = str(BACKEND)
-    if p not in sys.path:
-        sys.path.append(p)
-
-
-def load_model_columns() -> dict[str, set[str]]:
-    """{table: {columns}} from SQLAlchemy `Base.metadata`.
-
-    models/__init__.py only registers a subset, so import every model module to
-    fully populate the metadata (matches what main.py's import graph does before
-    `create_all`)."""
-    _ensure_backend_on_path()
-    import importlib
-
-    import app.models as models_pkg  # type: ignore
-
-    pkgdir = Path(models_pkg.__file__).parent
-    for mod in pkgdir.glob("*.py"):
-        if mod.stem != "__init__":
-            importlib.import_module(f"app.models.{mod.stem}")
-    from app.core.database import Base  # type: ignore
-
-    return {
-        name: {c.name for c in table.columns}
-        for name, table in Base.metadata.tables.items()
-    }
-
-
-# ── DB provisioning (parse the raw SQL in _run_schema_upgrades) ───────────────
-_ALTER_RE = re.compile(
-    r"ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+(\w+)",
-    re.IGNORECASE,
-)
-
-
-def load_upgrade_alters() -> set[tuple[str, str]]:
-    """{(table, column)} that `_run_schema_upgrades()` adds via ALTER. Existing
-    DBs only gain new columns through these (create_all won't touch live tables)."""
-    return set(_ALTER_RE.findall(read_text(MAIN_PY)))
 
 
 # ── version pins (A0) ─────────────────────────────────────────────────────────
@@ -157,26 +110,6 @@ def load_pins() -> dict[str, list[str] | str | None]:
     pins["docker-compose leader (runtime, exempt)"] = leader
 
     return pins
-
-
-# ── baseline (C2) ─────────────────────────────────────────────────────────────
-def baseline_path(version: str) -> Path:
-    return BASELINE_DIR / f"columns-{version}.json"
-
-
-def load_baseline(version: str) -> dict[str, list[str]] | None:
-    path = baseline_path(version)
-    if not path.exists():
-        return None
-    return json.loads(read_text(path))
-
-
-def write_baseline(version: str, columns: dict[str, set[str]]) -> Path:
-    BASELINE_DIR.mkdir(parents=True, exist_ok=True)
-    payload = {t: sorted(cols) for t, cols in sorted(columns.items())}
-    path = baseline_path(version)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return path
 
 
 # ── pinned version + committed schema (A2/A3) ─────────────────────────────────

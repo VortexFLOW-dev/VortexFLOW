@@ -3,7 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer, func
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 import uuid
@@ -27,7 +27,9 @@ class Instance(Base):
     fleet_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("fleets.id", ondelete="SET NULL"), nullable=True
     )
-    role: Mapped[str] = mapped_column(String, nullable=False, default="agent")
+    role: Mapped[str] = mapped_column(
+        String, nullable=False, default="agent", server_default="agent"
+    )
     # Vector global options, applied per-instance at deploy time (each host has
     # its own data_dir). data_dir is Vector's on-disk state/buffer location —
     # required for disk buffers; expire_metrics_secs bounds metric cardinality.
@@ -43,7 +45,9 @@ class Instance(Base):
     agent_status: Mapped[str | None] = mapped_column(String, nullable=True)
     # Vector version the agent last reported as installed (drift vs desired).
     vector_version: Mapped[str | None] = mapped_column(String, nullable=True)
-    tls_verify: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    tls_verify: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False, server_default=text("true")
+    )
     tls_ca_cert: Mapped[str | None] = mapped_column(String, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(

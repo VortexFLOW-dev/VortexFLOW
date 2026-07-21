@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Optional
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -59,6 +59,16 @@ class NotificationDelivery(Base):
     enqueue is idempotent (ON CONFLICT DO NOTHING) under concurrent callers."""
 
     __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        # One delivery per (event, channel, transition) — idempotent enqueue.
+        Index(
+            "ux_deliveries_event_channel_trans",
+            "event_id",
+            "channel_id",
+            "transition",
+            unique=True,
+        ),
+    )
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid.uuid4())
