@@ -18,7 +18,7 @@ from __future__ import annotations
 import functools
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import json
 
@@ -244,7 +244,9 @@ async def list_routes(fleet_id: str, ctx: Context) -> list[dict]:
 async def render_fleet_config(fleet_id: str, ctx: Context) -> dict:
     """Render the Vector YAML config VortexFlow would deploy for this fleet.
     Secrets are masked (this is a preview, not the deployed material). Returns the
-    YAML plus any render warnings."""
+    YAML plus advisory render warnings AND blocking errors — a non-empty `errors`
+    list means deploy would refuse this config; consult it before treating the
+    YAML as deploy-ready."""
     # Reuse the exact renderer the REST deploy/preview path uses (single source of
     # truth). Import lazily to avoid a module-load cycle through the API package.
     from app.api.v1.fleets import _render_fleet
@@ -252,7 +254,7 @@ async def render_fleet_config(fleet_id: str, ctx: Context) -> dict:
     async with authed_session(ctx) as (db, _user):
         await _fleet_or_error(db, fleet_id)
         result = await _render_fleet(fleet_id, db, reveal_secrets=False)
-    return {"yaml": result.yaml, "warnings": result.warnings}
+    return {"yaml": result.yaml, "warnings": result.warnings, "errors": result.errors}
 
 
 # ── transforms + catalog ────────────────────────────────────────────────────
@@ -279,7 +281,9 @@ async def list_transforms(ctx: Context) -> list[dict]:
 
 @mcp.tool()
 @_guard
-async def get_catalog(ctx: Context, kind: str | None = None) -> dict:
+async def get_catalog(
+    ctx: Context, kind: Literal["source", "sink"] | None = None
+) -> dict:
     """List the Vector source/sink types this deployment accepts (the component
     catalog). `kind` filters to "source" or "sink"; omit for both."""
     await require_user(ctx)  # auth only; the catalog is a static file, no DB
