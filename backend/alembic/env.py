@@ -35,8 +35,13 @@ for _module in pkgutil.iter_modules(_models_pkg.__path__):
     importlib.import_module(f"{_models_pkg.__name__}.{_module.name}")
 
 config = context.config
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Only configure logging on the CLI path. When the app drives migrations at
+# startup (config.attributes["connection"] is set), the process already has
+# uvicorn/app logging configured — fileConfig() would disable those loggers
+# (its default disable_existing_loggers=True silences every logger not named
+# in alembic.ini, including the fresh-install recovery-token warning).
+if config.config_file_name is not None and config.attributes.get("connection") is None:
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Application settings are authoritative for the connection URL.
 config.set_main_option("sqlalchemy.url", settings.database_url)
