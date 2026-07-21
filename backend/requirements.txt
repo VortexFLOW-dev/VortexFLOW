@@ -25,7 +25,7 @@ requests==2.34.2
 websockets==14.1
 # AI assistant (BYO-LLM) — VRL/AI plan B2. anthropic for Claude; openai SDK
 # doubles for OpenAI and any OpenAI-compatible self-hosted endpoint (Ollama/vLLM).
-anthropic==0.116.0
-openai==2.45.0
+anthropic==0.117.0
+openai==2.46.0
 # MCP server (Model Context Protocol) — read-only /mcp endpoint, streamable HTTP.
 mcp==1.28.1
