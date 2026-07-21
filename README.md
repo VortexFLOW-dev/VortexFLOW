@@ -26,6 +26,7 @@ If you're managing Vector config by hand — juggling YAML files, SSHing into bo
 - A VRL editor with syntax highlighting, live output preview, instant **server-side validate** (no instance needed), and a reusable transform library with `.vrl`/pack **import & export**
 - A health dashboard (throughput by fleet, errors, rollout convergence) and a **live event tap** on any node
 - Pull-based agents that validate-then-reload, bootstrapped into a fleet with a one-liner
+- An opt-in, read-only **MCP server** (`/mcp`, PAT-authenticated) so AI assistants can inspect fleets, render config, and validate VRL — see [`docs/MCP.md`](docs/MCP.md)
 
 **VortexFlow is not:**
 - A log search or analytics tool
