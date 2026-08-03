@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // import.meta.dirname (not the CJS __dirname global) — Vite's upcoming
+      // "native" config loader doesn't support __dirname.
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   server: {
