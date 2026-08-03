@@ -6,12 +6,21 @@ import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# We hash/verify with the `bcrypt` package directly rather than through
+# passlib's CryptContext. passlib 1.7.4 (its last release, unmaintained since
+# 2020) runs an unconditional bcrypt-backend self-test on first use that itself
+# feeds bcrypt an over-length probe string; bcrypt>=4.1 raises on that instead
+# of the old silent-truncate behavior passlib's self-test expects, so passlib's
+# bcrypt backend cannot initialize at all against modern bcrypt. Since this
+# codebase only ever used a single scheme (no passlib multi-scheme migration
+# in play), calling bcrypt directly is a strict behavior-preserving simplification
+# — the hash format ($2b$...) is identical either way, so existing stored
+# hashes keep verifying unchanged.
 
 # bcrypt hashes only the first 72 bytes of its input and ignores the rest, so
 # two different passwords sharing a 72-byte prefix would be equivalent. Reject
@@ -38,22 +47,28 @@ def get_password_hash(password: str) -> str:
     # Defense in depth: never hash a >72-byte password (silent truncation).
     if len(password.encode("utf-8")) > BCRYPT_MAX_BYTES:
         raise ValueError("Password exceeds the maximum length")
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    plain_bytes = plain.encode("utf-8")[:BCRYPT_MAX_BYTES]
+    try:
+        return bcrypt.checkpw(plain_bytes, hashed.encode("utf-8"))
+    except ValueError:
+        # Malformed/unrecognized hash (e.g. corrupt DB value) — treat as no match
+        # rather than raising through the auth path.
+        return False
 
 
 # A precomputed bcrypt hash to verify against when an auth path has no real hash
 # to check (unknown account/instance). Burning one bcrypt cycle either way keeps
 # response timing from revealing whether the identifier exists.
-_DUMMY_HASH = pwd_context.hash("vortexflow-timing-equalizer")
+_DUMMY_HASH = get_password_hash("vortexflow-timing-equalizer")
 
 
 def dummy_verify() -> None:
     """Burn one bcrypt verify — timing padding for absent-secret auth paths."""
-    pwd_context.verify("x", _DUMMY_HASH)
+    verify_password("x", _DUMMY_HASH)
 
 
 def create_access_token(
