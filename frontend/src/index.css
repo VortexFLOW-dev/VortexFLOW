@@ -1,6 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+/* Load the existing v3-style JS config (theme colors/radius/keyframes/animation/
+   container/darkMode + the tailwindcss-animate plugin) as-is via v4's documented
+   backward-compat path, rather than rewriting everything into @theme blocks. */
+@config '../tailwind.config.js';
 
 @layer base {
   /* ── Light theme (default) ── */
