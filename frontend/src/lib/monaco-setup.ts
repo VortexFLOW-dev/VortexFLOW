@@ -14,8 +14,13 @@
  */
 import { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor'
-import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+// monaco-editor 0.56.0 added a package.json "exports" map that maps the bare
+// subpath (`monaco-editor/<path>`) to `esm/vs/<path>.js` — the old deep import
+// path duplicated the `esm/vs/` prefix (`monaco-editor/esm/vs/esm/vs/...`),
+// which no file matches, so Rollup couldn't resolve it. Drop the `esm/vs/`
+// prefix from the imported subpath.
+import editorWorker from 'monaco-editor/editor/editor.worker?worker'
+import jsonWorker from 'monaco-editor/language/json/json.worker?worker'
 
 // VRL uses a custom Monarch tokenizer (no worker); JSON uses its language worker.
 // Vite bundles these workers locally via the ?worker suffix.
