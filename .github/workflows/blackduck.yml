@@ -19,10 +19,10 @@ jobs:
     name: Black Duck SCA
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Black Duck scan
-        uses: blackduck-inc/black-duck-security-scan@3fe94e4b3c3947bd21ba46b7da255d6d3638b325 # v2
+        uses: blackduck-inc/black-duck-security-scan@83489e3ec6c7c3367d114f96f59088530191d98b # v2
         with:
           blackduck_url: ${{ secrets.BLACKDUCK_URL }}
           blackduck_token: ${{ secrets.BLACKDUCK_API_TOKEN }}
