@@ -27,4 +27,4 @@ websockets==17.0.1
 anthropic==0.120.2
 openai==2.49.0
 # MCP server (Model Context Protocol) — read-only /mcp endpoint, streamable HTTP.
-mcp==1.28.1
+mcp==2.0.0
