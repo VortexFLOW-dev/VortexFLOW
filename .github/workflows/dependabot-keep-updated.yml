@@ -1,0 +1,47 @@
+name: Dependabot keep-updated
+
+# Auto-merge (dependabot-auto-merge.yml) enables GitHub's auto-merge on patch-level
+# Dependabot PRs, but branch protection requires the PR branch to be up to date with
+# `main` before checks count (required_status_checks.strict). Nothing else ever
+# updates a Dependabot branch after it's opened, so once `main` moves — via ANY other
+# merge — an auto-merge-enabled PR falls BEHIND and sits forever with green checks,
+# never actually merging. This job is the missing piece: it brings stale Dependabot
+# branches back up to date so auto-merge can complete.
+#
+# Scope: only PRs opened by dependabot[bot]. Runs after every push to main (the
+# common trigger — another PR just merged) plus a periodic sweep as a backstop for
+# any push this misses.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-stale-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update branches for stale Dependabot PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          stale=$(gh pr list --repo "$REPO" --state open --author "app/dependabot" --json number,mergeStateStatus \
+            -q '.[] | select(.mergeStateStatus == "BEHIND") | .number')
+          if [ -z "$stale" ]; then
+            echo "No stale Dependabot branches."
+            exit 0
+          fi
+          for n in $stale; do
+            echo "Updating branch for PR #$n"
+            gh api --method PUT "repos/$REPO/pulls/$n/update-branch" \
+              && echo "  ok" \
+              || echo "  update-branch failed for #$n (non-fatal, will retry next run)"
+          done
