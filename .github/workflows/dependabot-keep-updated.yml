@@ -33,8 +33,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          stale=$(gh pr list --repo "$REPO" --state open --json number,author,mergeStateStatus \
-            -q '.[] | select(.author.login == "dependabot[bot]") | select(.mergeStateStatus == "BEHIND") | .number')
+          stale=$(gh pr list --repo "$REPO" --state open --author "app/dependabot" --json number,mergeStateStatus \
+            -q '.[] | select(.mergeStateStatus == "BEHIND") | .number')
           if [ -z "$stale" ]; then
             echo "No stale Dependabot branches."
             exit 0
