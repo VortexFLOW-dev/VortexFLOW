@@ -11,6 +11,12 @@ name: Dependabot keep-updated
 # Scope: only PRs opened by dependabot[bot]. Runs after every push to main (the
 # common trigger — another PR just merged) plus a periodic sweep as a backstop for
 # any push this misses.
+#
+# Side effect: `update-branch` pushes as github-actions[bot], not dependabot[bot], so
+# the resulting CI run loses Dependabot's usual auto-approval-to-run and lands in
+# `action_required`. This job approves those runs itself — but only for runs attached
+# to a PR that's still, at approval time, in the dependabot-authored open-PR set this
+# job already queried; it never touches a run on anyone else's PR.
 
 on:
   push:
@@ -22,26 +28,44 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   update-stale-branches:
     runs-on: ubuntu-latest
     steps:
-      - name: Update branches for stale Dependabot PRs
+      - name: Update stale branches, then approve any CI runs that require it
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          dependabot_prs=$(gh pr list --repo "$REPO" --state open --author "app/dependabot" --json number -q '.[].number')
+
           stale=$(gh pr list --repo "$REPO" --state open --author "app/dependabot" --json number,mergeStateStatus \
             -q '.[] | select(.mergeStateStatus == "BEHIND") | .number')
           if [ -z "$stale" ]; then
             echo "No stale Dependabot branches."
-            exit 0
+          else
+            for n in $stale; do
+              echo "Updating branch for PR #$n"
+              gh api --method PUT "repos/$REPO/pulls/$n/update-branch" \
+                && echo "  ok" \
+                || echo "  update-branch failed for #$n (non-fatal, will retry next run)"
+            done
+            echo "Waiting for GitHub to register the resulting CI runs..."
+            sleep 20
           fi
-          for n in $stale; do
-            echo "Updating branch for PR #$n"
-            gh api --method PUT "repos/$REPO/pulls/$n/update-branch" \
-              && echo "  ok" \
-              || echo "  update-branch failed for #$n (non-fatal, will retry next run)"
+
+          echo "Checking for CI runs awaiting approval on open Dependabot PRs..."
+          for n in $dependabot_prs; do
+            ids=$(gh api "repos/$REPO/actions/runs?event=pull_request&status=action_required" \
+              -q '.workflow_runs[] | select(.pull_requests[]?.number == '"$n"') | .id')
+            for id in $ids; do
+              [ -z "$id" ] && continue
+              echo "Approving run $id for PR #$n"
+              gh api --method POST "repos/$REPO/actions/runs/$id/approve" \
+                && echo "  ok" \
+                || echo "  approve failed for run $id (non-fatal, will retry next run)"
+            done
           done
