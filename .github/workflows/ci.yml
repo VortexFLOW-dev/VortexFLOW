@@ -35,7 +35,7 @@ jobs:
           --health-cmd "pg_isready -U vortexflow"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: System deps (xmlsec for python3-saml)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libxml2-dev libxmlsec1-dev
@@ -86,7 +86,7 @@ jobs:
     name: Contract drift · sentinel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: System deps (xmlsec for python3-saml)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libxml2-dev libxmlsec1-dev
@@ -121,9 +121,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: 10
 
@@ -151,7 +151,7 @@ jobs:
     name: Agent · vet · build · test · scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The Go agent runs as root on fleet hosts, so its safety checks (e.g.
       # confining server-supplied cert paths to the managed dir) must be tested +
@@ -180,7 +180,7 @@ jobs:
     name: Secret scan · gitleaks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Gitleaks (full history)
