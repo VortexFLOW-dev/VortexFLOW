@@ -29,11 +29,13 @@ permissions:
   contents: write
   pull-requests: write
   actions: write
-  # Dependabot PRs for the github-actions ecosystem edit files under
-  # .github/workflows/ directly. GitHub refuses to update-branch (merge main
-  # into the PR branch) on such a branch without this permission, even though
-  # the merge itself changes nothing about what the workflow files DO.
-  workflows: write
+
+# GITHUB_TOKEN can never create or update files under .github/workflows/ —
+# that's a hard platform restriction with no permission that lifts it (only a
+# PAT with the `workflow` scope can). So update-branch 403s here for any
+# Dependabot PR that itself edits a workflow file's `uses:` pin (confirmed
+# live on #84/#86). Those PRs need a manual "Update branch" click before they
+# can merge — everything else is unaffected.
 
 jobs:
   update-stale-branches:
