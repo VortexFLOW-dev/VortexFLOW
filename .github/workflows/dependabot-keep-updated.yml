@@ -29,6 +29,11 @@ permissions:
   contents: write
   pull-requests: write
   actions: write
+  # Dependabot PRs for the github-actions ecosystem edit files under
+  # .github/workflows/ directly. GitHub refuses to update-branch (merge main
+  # into the PR branch) on such a branch without this permission, even though
+  # the merge itself changes nothing about what the workflow files DO.
+  workflows: write
 
 jobs:
   update-stale-branches:
