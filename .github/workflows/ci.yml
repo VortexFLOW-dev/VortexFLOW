@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Merges done by GitHub auto-merge (Dependabot patch PRs) are pushed with the
+  # Actions token, which does NOT trigger `push` workflows — so without this,
+  # main is never re-tested after an auto-merge. Branch protection doesn't
+  # require up-to-date branches, so two individually-green PRs can still clash;
+  # a daily run on main catches that within a day.
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch: {}
 
 permissions:
   contents: read

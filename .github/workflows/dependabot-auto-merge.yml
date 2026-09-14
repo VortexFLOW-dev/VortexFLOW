@@ -14,8 +14,9 @@ name: Dependabot auto-merge
 # (required_status_checks.strict = false). With strict on, every merge left the other
 # auto-merge PRs BEHIND forever and needed a bot to rebase + re-approve CI runs — a
 # workflow that itself kept breaking. Without it, PRs merge on their own green checks;
-# a real conflict still blocks the merge (Dependabot rebases those itself), and CI on
-# the push to `main` catches the rare semantic clash between two dependency bumps.
+# a real conflict still blocks the merge (Dependabot rebases those itself), and the
+# daily scheduled CI run on `main` catches the rare semantic clash between two bumps
+# (an auto-merge push doesn't trigger `push` workflows — see ci.yml).
 #
 # `pull_request_target` runs with write permissions against the BASE repo. This job
 # never checks out or executes PR code — it only reads metadata and calls the API.
