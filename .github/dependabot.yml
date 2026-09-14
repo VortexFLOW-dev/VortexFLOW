@@ -44,10 +44,10 @@ updates:
         patterns: ['*']
         update-types: ['minor']
     ignore:
-      # msal 1.36.0 requires cryptography<49 — hold the 49+ bump until msal
-      # relaxes the cap (otherwise dependency resolution / Azure SSO breaks).
+      # msal caps cryptography (1.38.0: <51). Hold the NEXT major until msal
+      # relaxes the cap again, otherwise dependency resolution / Azure SSO breaks.
       - dependency-name: 'cryptography'
-        versions: ['>=49']
+        versions: ['>=51']
 
   # Frontend deps (pnpm-lock.yaml)
   - package-ecosystem: npm
