@@ -20,6 +20,10 @@ its first release.
   proven against a live server (tool listing, an authenticated read, a bad-PAT
   rejection, and the `validate_vrl` subprocess path all round-tripped
   correctly post-upgrade).
+- AI assistant SDKs bumped to `anthropic` 1.2 and `openai` 3.6 (majors). The
+  calls VortexFlow makes (client construction, `messages.create`,
+  `chat.completions.create`) are unchanged across both; verified end-to-end
+  against a stub provider endpoint.
 
 ### Security
 - **The refresh token is now an httpOnly cookie, not localStorage.** Login,
