@@ -30,11 +30,11 @@ EXPECTED_TOOLS = [
 
 
 class _Ctx:
-    """Minimal stand-in for mcp.server.fastmcp.Context.request_context."""
+    """Minimal stand-in for mcp.server.mcpserver.Context — just its `.headers`
+    property, which is all `_extract_pat` touches."""
 
     def __init__(self, headers=None, *, has_request=True):
-        req = type("Req", (), {"headers": headers or {}})() if has_request else None
-        self.request_context = type("RC", (), {"request": req})()
+        self.headers = headers if has_request else None
 
 
 def test_extract_pat_ok():

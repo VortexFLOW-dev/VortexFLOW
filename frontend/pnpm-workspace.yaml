@@ -7,3 +7,10 @@ onlyBuiltDependencies:
 
 overrides:
   dompurify: ^3.4.11
+
+# Don't resolve package versions younger than 3 days (minutes). Matches the
+# cooldown Dependabot applies when it updates this lockfile: a newer-than-3-day
+# version already in the lockfile makes every Dependabot pnpm job fail with
+# ERR_PNPM_NO_MATURE_MATCHING_VERSION. Also a cheap guard against freshly
+# published malicious releases.
+minimumReleaseAge: 4320
