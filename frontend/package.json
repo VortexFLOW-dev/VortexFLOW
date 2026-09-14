@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.34.5",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,14 +11,6 @@
     "preview": "vite preview",
     "gen:catalog": "tsx scripts/gen-catalog.ts && tsx scripts/gen-catalog-manifest.ts",
     "gen:catalog-manifest": "tsx scripts/gen-catalog-manifest.ts"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ],
-    "overrides": {
-      "dompurify": "^3.4.11"
-    }
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",

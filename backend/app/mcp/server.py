@@ -22,7 +22,7 @@ from typing import Any, Literal
 
 import json
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 from sqlalchemy import func, select
 
 from app.mcp.auth import McpAuthError, authed_session, require_user
@@ -63,7 +63,7 @@ def _guard(fn):
     return wrapper
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "VortexFlow",
     instructions=(
         "Read-only access to a VortexFlow deployment (a management UI for Vector "
@@ -73,8 +73,6 @@ mcp = FastMCP(
         "with a VortexFlow personal access token: `Authorization: Bearer "
         "vf_pat_...`. All tools are read-only."
     ),
-    stateless_http=True,
-    streamable_http_path="/",
 )
 
 
@@ -349,4 +347,4 @@ async def list_instances(ctx: Context, fleet_id: str | None = None) -> list[dict
 def build_asgi_app():
     """The streamable-HTTP ASGI app to mount at /mcp. Mounting also lazily creates
     the session manager; `app.main` runs it in the FastAPI lifespan."""
-    return mcp.streamable_http_app()
+    return mcp.streamable_http_app(stateless_http=True, streamable_http_path="/")
