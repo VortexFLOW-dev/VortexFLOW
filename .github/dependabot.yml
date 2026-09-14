@@ -1,11 +1,19 @@
 version: 2
 
+# Schedule
+# --------
+# MONTHLY for every ecosystem. This only paces routine version updates — Dependabot
+# SECURITY updates are not tied to this schedule and still open as soon as an
+# advisory lands. Weekly across five ecosystems meant ~8 PRs a week to triage, most
+# of them churn; one monthly batch is the same freshness at a fraction of the noise.
+#
 # Grouping policy
 # ---------------
-# Each ecosystem opens at most two grouped PRs per week: one for patch bumps and one
-# for minor bumps. MAJORS are deliberately left out of every group so they arrive as
+# Each ecosystem opens at most two grouped PRs per month: one for patch bumps and one
+# for minor bumps. MAJORS are deliberately left out of those groups so they arrive as
 # individual PRs — a major is a migration, not a merge button (tailwind 3→4, bcrypt
-# 4→5 and websockets 14→16 all needed hands-on work).
+# 4→5 and websockets 14→16 all needed hands-on work). The one exception is the
+# backend `ai-sdks` group, whose majors are better migrated together.
 #
 # Only the `*-patch` groups are eligible for auto-merge; see
 # .github/workflows/dependabot-auto-merge.yml.
@@ -15,10 +23,18 @@ updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     labels: ['dependencies', 'backend']
     groups:
+      # The AI/MCP SDKs move fast and break often (mcp 2.0, anthropic 1.x, openai 3.x
+      # all landed within a month) and share code paths (VRL assistant, MCP server).
+      # One PR for all of them — majors included — so they're migrated together.
+      # Listed first: a dependency joins the FIRST group it matches. Never
+      # auto-merged unless every bump in it is a patch.
+      ai-sdks:
+        applies-to: version-updates
+        patterns: ['anthropic', 'openai', 'mcp']
       backend-patch:
         applies-to: version-updates
         patterns: ['*']
@@ -37,7 +53,7 @@ updates:
   - package-ecosystem: npm
     directory: /frontend
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
     labels: ['dependencies', 'frontend']
     groups:
@@ -54,7 +70,7 @@ updates:
   - package-ecosystem: gomod
     directory: /agent
     schedule:
-      interval: weekly
+      interval: monthly
     labels: ['dependencies', 'agent']
     groups:
       agent-patch:
@@ -75,15 +91,22 @@ updates:
   # hand against https://github.com/nodejs/Release and verify with a real `build-images`
   # dispatch. Patch/minor of the pinned line still flows through.
   - package-ecosystem: docker
-    directory: /docker
+    # Both Dockerfiles that build the agent, so the Go version can't drift between
+    # the shipped image and the demo agent (CI reads it from backend.Dockerfile).
+    directories: ['/docker', '/docker/demo']
     schedule:
-      interval: weekly
+      interval: monthly
     labels: ['dependencies', 'docker']
     groups:
       docker-patch:
         applies-to: version-updates
         patterns: ['*']
         update-types: ['patch']
+      # Grouped so a golang/nginx minor lands in both Dockerfiles in ONE PR.
+      docker-minor:
+        applies-to: version-updates
+        patterns: ['*']
+        update-types: ['minor']
     ignore:
       - dependency-name: 'node'
         update-types: ['version-update:semver-major']
@@ -94,7 +117,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     labels: ['dependencies', 'ci']
     groups:
       actions-patch:
