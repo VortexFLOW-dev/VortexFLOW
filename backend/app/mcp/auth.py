@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from mcp.server.fastmcp import Context
+from mcp.server.mcpserver import Context
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
@@ -30,10 +30,10 @@ class McpAuthError(Exception):
 
 
 def _extract_pat(ctx: Context) -> str:
-    request = getattr(ctx.request_context, "request", None)
-    if request is None:  # e.g. stdio transport — not supported for auth
+    headers = ctx.headers
+    if headers is None:  # e.g. stdio transport — not supported for auth
         raise McpAuthError("no HTTP request on the MCP context")
-    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    scheme, _, token = headers.get("authorization", "").partition(" ")
     token = token.strip()
     if scheme.lower() != "bearer" or not token:
         raise McpAuthError(

@@ -12,6 +12,18 @@ its first release.
 - Dependency updates: `redis` 8, `docker/metadata-action` v6, and routine
   frontend (monaco-editor, @xyflow/react, radix, eslint, postcss) + backend
   (asyncpg, anthropic, aiofiles) and base-image (nginx) bumps.
+- **Migrated to `mcp` SDK v2** (2.2) (`FastMCP` → `MCPServer`, now imported from
+  `mcp.server.mcpserver`; `stateless_http`/`streamable_http_path` moved from
+  the constructor to `streamable_http_app()`). PAT auth now reads
+  `ctx.headers` (the SDK's own public accessor) instead of reaching into
+  `ctx.request_context.request` directly. No behavior or tool-surface change;
+  proven against a live server (tool listing, an authenticated read, a bad-PAT
+  rejection, and the `validate_vrl` subprocess path all round-tripped
+  correctly post-upgrade).
+- AI assistant SDKs bumped to `anthropic` 1.5 and `openai` 3.13 (majors). The
+  calls VortexFlow makes (client construction, `messages.create`,
+  `chat.completions.create`) are unchanged across both; verified end-to-end
+  against a stub provider endpoint.
 
 ### Security
 - **The refresh token is now an httpOnly cookie, not localStorage.** Login,
