@@ -4,7 +4,7 @@
 # Demo only — talks to the backend over plain internal HTTP.
 
 # ── Stage 1: build the agent binary for this image's arch ─────────────────────
-FROM golang:1.26-bookworm AS agent-build
+FROM golang:1.27-bookworm AS agent-build
 WORKDIR /src/agent
 COPY agent/ ./
 RUN CGO_ENABLED=0 go build -ldflags "-s -w" -o /out/vortexflow-agent .
