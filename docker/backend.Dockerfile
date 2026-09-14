@@ -12,7 +12,7 @@ ARG VECTOR_VERSION=0.56.0
 FROM timberio/vector:${VECTOR_VERSION}-debian AS vector
 
 # ── Stage 1: agent binaries ───────────────────────────────────────────────────
-FROM golang:1.26-bookworm AS agent-build
+FROM golang:1.27-bookworm AS agent-build
 ARG VERSION=dev
 WORKDIR /src/agent
 COPY agent/ ./
