@@ -54,11 +54,13 @@ jobs:
       # ── Frontend (JS/TS) ──
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          version: 10
+          # No `version:` — read from "packageManager" in frontend/package.json, the
+          # single pin shared with Dependabot and the web image.
+          package_json_file: frontend/package.json
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version-file: frontend/.nvmrc
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 

@@ -6,13 +6,13 @@
 # ── Stage 1: build the SPA ────────────────────────────────────────────────────
 FROM node:22-alpine AS build
 WORKDIR /app
-# Pin pnpm to match the lockfile's toolchain. corepack otherwise pulls the latest
-# pnpm, which handles build-script approval differently.
-RUN corepack enable && corepack prepare pnpm@10.34.3 --activate
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
+# `corepack prepare` with no argument activates the pnpm pinned by "packageManager"
+# in package.json — the same single pin CI and Dependabot use.
+RUN corepack enable && corepack prepare --activate
 # Plain install (not --frozen-lockfile): frozen mode reads build-script approval
 # from lockfile settings, skipping esbuild's build → ERR_PNPM_IGNORED_BUILDS. A
-# plain install honors pnpm.onlyBuiltDependencies. Versions stay pinned by the lockfile.
+# plain install honors onlyBuiltDependencies (pnpm-workspace.yaml). Versions stay pinned by the lockfile.
 RUN pnpm install
 COPY frontend/ ./
 RUN pnpm build

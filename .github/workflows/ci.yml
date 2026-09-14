@@ -125,11 +125,13 @@ jobs:
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          version: 10
+          # No `version:` — read from "packageManager" in frontend/package.json, the
+          # single pin shared with Dependabot and the web image.
+          package_json_file: frontend/package.json
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version-file: frontend/.nvmrc
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
@@ -155,12 +157,20 @@ jobs:
 
       # The Go agent runs as root on fleet hosts, so its safety checks (e.g.
       # confining server-supplied cert paths to the managed dir) must be tested +
-      # scanned. Build in the golang container — mirrors the Makefile
-      # `agent-build` fallback — so no separate toolchain pin is needed.
+      # scanned. Build in the SAME golang image the backend image ships the agent
+      # with, read from its Dockerfile — so a Dependabot base-image bump is
+      # actually tested here instead of CI silently staying on the old Go.
+      - name: Resolve Go image from backend Dockerfile
+        id: go
+        run: |
+          img=$(grep -m1 -oE 'golang:[0-9][0-9A-Za-z._-]*' docker/backend.Dockerfile)
+          test -n "$img"
+          echo "image=$img" >> "$GITHUB_OUTPUT"
+
       - name: Go vet · build · test · govulncheck (golang container)
         run: |
           docker run --rm -v "$PWD/agent":/src -w /src -e CGO_ENABLED=0 \
-            golang:1.26 sh -c '
+            ${{ steps.go.outputs.image }} sh -c '
               go vet ./... &&
               go build -o /tmp/agent . &&
               go test ./... &&
@@ -173,7 +183,7 @@ jobs:
         continue-on-error: true
         run: |
           docker run --rm -v "$PWD/agent":/src -w /src -e CGO_ENABLED=0 \
-            golang:1.26 sh -c \
+            ${{ steps.go.outputs.image }} sh -c \
             'go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet ./...'
 
   secrets:
