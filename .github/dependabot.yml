@@ -110,8 +110,16 @@ updates:
     ignore:
       - dependency-name: 'node'
         update-types: ['version-update:semver-major']
+      # Python tags are MAJOR.MINOR, so a 3.12 -> 3.14 jump is a semver *minor* to
+      # Dependabot and slipped past a major-only ignore (#111 proposed 3.14, which
+      # has no pydantic-core arm64 wheel). Only patch releases of 3.12 flow through.
       - dependency-name: 'python'
-        update-types: ['version-update:semver-major']
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      # Vector is pinned in lock-step across the Makefile (VECTOR_VERSION), compose,
+      # backend.Dockerfile's ARG and the demo agent, and the catalog is generated
+      # from that version's schema. A Dependabot bump would touch only one of them.
+      # The Sentinel (online) job already flags a newer Vector; bump by hand.
+      - dependency-name: 'timberio/vector'
 
   # GitHub Actions used by the workflows
   - package-ecosystem: github-actions
