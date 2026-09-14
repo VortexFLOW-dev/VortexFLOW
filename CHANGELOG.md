@@ -12,6 +12,14 @@ its first release.
 - Dependency updates: `redis` 8, `docker/metadata-action` v6, and routine
   frontend (monaco-editor, @xyflow/react, radix, eslint, postcss) + backend
   (asyncpg, anthropic, aiofiles) and base-image (nginx) bumps.
+- **Migrated to `mcp` SDK v2** (`FastMCP` → `MCPServer`, now imported from
+  `mcp.server.mcpserver`; `stateless_http`/`streamable_http_path` moved from
+  the constructor to `streamable_http_app()`). PAT auth now reads
+  `ctx.headers` (the SDK's own public accessor) instead of reaching into
+  `ctx.request_context.request` directly. No behavior or tool-surface change;
+  proven against a live server (tool listing, an authenticated read, a bad-PAT
+  rejection, and the `validate_vrl` subprocess path all round-tripped
+  correctly post-upgrade).
 
 ### Security
 - **The refresh token is now an httpOnly cookie, not localStorage.** Login,
