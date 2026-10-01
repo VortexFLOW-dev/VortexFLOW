@@ -1,9 +1,9 @@
 fastapi==0.141.1
-uvicorn[standard]==0.52.4
+uvicorn[standard]==0.54.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
-sqlalchemy[asyncio]==2.0.52
-alembic==1.19.2
+sqlalchemy[asyncio]==2.1.1
+alembic==1.20.0
 asyncpg==0.31.0
 redis[hiredis]==8.1.0
 httpx==0.28.1
@@ -12,7 +12,7 @@ bcrypt==5.0.0
 python-multipart==0.0.32
 pyyaml==6.0.3
 aiofiles==25.1.0
-msal==1.38.0
+msal==1.39.0
 cryptography==50.0.1
 ldap3==2.9.1
 python3-saml==1.16.0
